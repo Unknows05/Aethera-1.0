@@ -93,12 +93,15 @@ if [ -d "$INSTALL_DIR" ] && [ -d "$INSTALL_DIR/.git" ]; then
     echo -e "\n${YELLOW}Aethera already installed at $INSTALL_DIR${NC}"
     echo -e "Updating instead of fresh install..."
     cd "$INSTALL_DIR"
-    git fetch origin main
-    git reset --hard origin/main
+    git fetch origin main 2>/dev/null || true
+    git reset --hard origin/main 2>/dev/null || git pull origin main 2>/dev/null || true
     echo -e "${GREEN}✓ Updated to latest${NC}"
 else
     echo -e "\n${CYAN}Installing Aethera to $INSTALL_DIR...${NC}"
-    git clone "$REPO" "$INSTALL_DIR"
+    git clone "$REPO" "$INSTALL_DIR" 2>/dev/null || {
+        echo -e "${RED}✗ Clone failed. Check: internet? repo URL?${NC}"
+        exit 1
+    }
     cd "$INSTALL_DIR"
     echo -e "${GREEN}✓ Cloned repository${NC}"
 fi
@@ -117,7 +120,7 @@ _pip_install() {
 
 _pip_install --upgrade pip 2>/dev/null || true
 _pip_install -r requirements.txt || \
-_pip_install fastapi uvicorn apscheduler click rich requests openai ccxt pyyaml httpx pynacl websockets aiohttp python-multipart cryptography numpy pandas python-telegram-bot prompt-toolkit
+_pip_install fastapi uvicorn apscheduler click rich requests openai ccxt pyyaml httpx pynacl websockets aiohttp python-multipart cryptography numpy pandas python-telegram-bot prompt-toolkit || true
 echo -e "${GREEN}✓ Python dependencies installed${NC}"
 
 # ── Build TUI ───────────────────────────────────────────
@@ -125,8 +128,8 @@ echo -e "${GREEN}✓ Python dependencies installed${NC}"
 if [ "$HAS_NODE" = true ] && [ -d "tui" ]; then
     echo -e "\n${CYAN}Building TypeScript TUI...${NC}"
     cd tui
-    npm install --silent 2>/dev/null
-    npm run build 2>/dev/null
+    npm install --silent 2>/dev/null || true
+    npm run build 2>/dev/null || true
     cd ..
     echo -e "${GREEN}✓ TUI built${NC}"
 else
@@ -209,4 +212,13 @@ if [[ "$answer" =~ ^[Nn]$ ]]; then
 else
     cd "$INSTALL_DIR"
     exec python3 cli.py init </dev/tty
+fi
+
+# Final note about PATH
+echo -e ""
+echo -e "${CYAN}Note: If 'aethera' command not found, run:${NC}"
+if [[ -f "$HOME/.zshrc" ]]; then
+    echo -e "  ${CYAN}source ~/.zshrc${NC}"
+else
+    echo -e "  ${CYAN}source ~/.bashrc${NC}"
 fi
