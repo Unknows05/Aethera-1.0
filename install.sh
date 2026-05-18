@@ -106,6 +106,7 @@ fi
 # ── Python Dependencies ─────────────────────────────────
 
 echo -e "\n${CYAN}Installing Python dependencies...${NC}"
+export PIP_BREAK_SYSTEM_PACKAGES=1
 python3 -m pip install --quiet --upgrade pip
 python3 -m pip install --quiet -r requirements.txt 2>/dev/null || \
 python3 -m pip install --quiet click rich requests openai ccxt pyyaml httpx apscheduler pynacl 2>/dev/null
