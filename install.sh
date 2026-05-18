@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Aethera v1.5 — Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/Unknows05/Aethera/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/Unknows05/Aethera-1.0/main/install.sh | bash
 
 set -euo pipefail
 
@@ -148,14 +148,27 @@ exec python3 "$AETHERA_ROOT/cli.py" "$@"
 WRAPPER
 chmod +x "$BIN_DIR/aethera"
 
-# Check if bin dir is in PATH
+# Add to PATH if not already
+PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-    echo -e "${YELLOW}⚠ $HOME/.local/bin not in PATH${NC}"
-    echo -e "  Add this to ~/.bashrc or ~/.zshrc:"
-    echo -e "  ${CYAN}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
-else
-    echo -e "${GREEN}✓ CLI symlink created${NC}"
+    echo -e "${YELLOW}⚠ Adding ~/.local/bin to PATH...${NC}"
+    # Auto-add to shell rc
+    if [[ -f "$HOME/.zshrc" ]]; then
+        echo "$PATH_LINE" >> "$HOME/.zshrc"
+        echo -e "${GREEN}✓ Added to ~/.zshrc${NC}"
+    elif [[ -f "$HOME/.bashrc" ]]; then
+        echo "$PATH_LINE" >> "$HOME/.bashrc"
+        echo -e "${GREEN}✓ Added to ~/.bashrc${NC}"
+    elif [[ -f "$HOME/.bash_profile" ]]; then
+        echo "$PATH_LINE" >> "$HOME/.bash_profile"
+        echo -e "${GREEN}✓ Added to ~/.bash_profile${NC}"
+    else
+        echo -e "${YELLOW}⚠ Could not auto-add to shell rc. Add manually:${NC}"
+        echo -e "  ${CYAN}$PATH_LINE${NC}"
+    fi
+    export PATH="$HOME/.local/bin:$PATH"
 fi
+echo -e "${GREEN}✓ CLI symlink created${NC}"
 
 # ── Create data directory ───────────────────────────────
 
