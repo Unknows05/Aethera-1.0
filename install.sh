@@ -117,7 +117,7 @@ _pip_install() {
 
 _pip_install --upgrade pip 2>/dev/null || true
 _pip_install -r requirements.txt || \
-_pip_install click rich requests openai ccxt pyyaml httpx apscheduler pynacl
+_pip_install fastapi uvicorn apscheduler click rich requests openai ccxt pyyaml httpx pynacl websockets aiohttp python-multipart cryptography numpy pandas python-telegram-bot prompt-toolkit
 echo -e "${GREEN}✓ Python dependencies installed${NC}"
 
 # ── Build TUI ───────────────────────────────────────────
