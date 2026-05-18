@@ -9,7 +9,7 @@ const cli = meow(`
     $ aethera-tui [options]
 
   Options
-    --base-url    Backend API URL (default: http://localhost:8000)
+    --base-url    Backend API URL (default: http://127.0.0.1:8000)
     --help        Show help
     --version     Show version
 
@@ -21,7 +21,7 @@ const cli = meow(`
   flags: {
     baseUrl: {
       type: 'string',
-      default: 'http://localhost:8000',
+      default: 'http://127.0.0.1:8000',
     },
   },
 })

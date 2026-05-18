@@ -843,7 +843,7 @@ def start():
         time.sleep(1)
         try:
             import urllib.request
-            urllib.request.urlopen("http://localhost:8000/api/status", timeout=2)
+            urllib.request.urlopen("http://127.0.0.1:8000/api/status", timeout=2)
             console.print("[green]API server ready[/green]")
             break
         except Exception:
