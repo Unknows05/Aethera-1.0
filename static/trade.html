@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto-Trading — Coin Screener</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; margin: 0; padding: 0; box-sizing: border-box; }
+        body { background-color: #040608; color: #64748b; min-height: 100vh; }
+        .glass { background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .btn-p { background: rgba(255, 255, 255, 0.08); color: #f8fafc; transition: all 0.2s; border: 1px solid rgba(255, 255, 255, 0.1); cursor: pointer; }
+        .btn-p:hover { background: rgba(255, 255, 255, 0.14); }
+        .btn-s { background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2); cursor: pointer; }
+        .btn-s:hover { background: rgba(16, 185, 129, 0.2); }
+        .btn-d { background: rgba(244, 63, 94, 0.12); color: #f43f5e; border: 1px solid rgba(244, 63, 94, 0.2); cursor: pointer; }
+        .btn-d:hover { background: rgba(244, 63, 94, 0.2); }
+        .inp { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06); color: #f8fafc; transition: border-color 0.2s; }
+        .inp:focus { outline: none; border-color: rgba(255, 255, 255, 0.2); }
+        .inp::placeholder { color: #334155; }
+        .pos { color: #10b981; }
+        .neg { color: #f43f5e; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+        .dot-on { background: #10b981; box-shadow: 0 0 8px rgba(16, 185, 129, 0.4); }
+        .dot-off { background: #f43f5e; }
+        .pulse { animation: pulse 2s infinite; } @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .bg-blob-1 { position: fixed; top: -10%; right: -10%; width: 600px; height: 600px; background: radial-gradient(circle, rgba(56, 189, 248, 0.04) 0%, transparent 70%); filter: blur(100px); z-index: 0; pointer-events: none; border-radius: 50%; }
+        .bg-blob-2 { position: fixed; bottom: -10%; left: -10%; width: 800px; height: 800px; background: radial-gradient(circle, rgba(139, 92, 246, 0.03) 0%, transparent 70%); filter: blur(120px); z-index: 0; pointer-events: none; border-radius: 50%; }
+        #toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%) translateY(12px); background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(255,255,255,0.08); color: #f8fafc; font-size: 12px; font-weight: 600; padding: 10px 24px; border-radius: 100px; opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s; z-index: 9999; }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    </style>
+</head>
+<body class="relative overflow-x-hidden">
+    <div class="bg-blob-1"></div><div class="bg-blob-2"></div><div id="toast"></div>
+
+    <div class="relative z-10 max-w-4xl mx-auto p-4 md:p-8 pb-24">
+        <header class="text-center py-10">
+            <h1 class="text-5xl font-black text-white tracking-tighter">Auto-Trading</h1>
+            <p class="text-sm text-slate-600 mt-2">Automated Binance Futures execution</p>
+            <div class="flex gap-4 justify-center mt-4">
+                <a href="/" class="text-xs text-slate-500 hover:text-white transition-colors">← Screener</a>
+                <a href="/account" class="text-xs text-slate-500 hover:text-white transition-colors">← Account</a>
+            </div>
+        </header>
+
+        <!-- Not Connected -->
+        <div id="no-binance" class="glass rounded-3xl p-8 text-center">
+            <div class="text-5xl mb-6">🔑</div>
+            <h2 class="text-white font-bold text-lg mb-3">Binance API Key Required</h2>
+            <p class="text-sm text-slate-500 mb-6">Connect your Binance Futures API key first.</p>
+            <a href="/account" class="btn-s px-8 py-4 rounded-2xl text-sm font-bold tracking-wide uppercase inline-flex items-center gap-2">Go to Account Setup</a>
+        </div>
+
+        <!-- Trader Controls -->
+        <div id="trader-section" class="hidden space-y-6">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div class="glass rounded-2xl p-4 text-center"><div class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">Trader</div><div id="trader-status" class="text-white font-bold text-sm">--</div></div>
+                <div class="glass rounded-2xl p-4 text-center"><div class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">Equity</div><div class="text-white font-bold text-sm" id="eq-val">--</div></div>
+                <div class="glass rounded-2xl p-4 text-center"><div class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">Drawdown</div><div class="text-white font-bold text-sm" id="dd-val">--</div></div>
+                <div class="glass rounded-2xl p-4 text-center"><div class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">LLM</div><div class="text-white font-bold text-sm" id="llm-status-val">--</div></div>
+            </div>
+
+            <div class="glass rounded-3xl p-6">
+                <h2 class="text-white font-bold text-sm mb-4 uppercase tracking-wider">Trade Control</h2>
+                <div class="flex gap-3">
+                    <button id="btn-start" onclick="startTrading()" class="btn-s flex-1 p-4 rounded-2xl text-sm font-bold tracking-wide uppercase">Start Trading</button>
+                    <button id="btn-stop" onclick="stopTrading()" class="btn-d flex-1 p-4 rounded-2xl text-sm font-bold tracking-wide uppercase hidden">Stop & Close All</button>
+                </div>
+                <div id="trade-msg" class="mt-4 text-xs text-center"></div>
+            </div>
+
+            <div class="glass rounded-3xl p-6">
+                <h2 class="text-white font-bold text-sm mb-4 uppercase tracking-wider">Risk Settings</h2>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                    <div><label class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">Risk %/Trade</label><input type="number" id="set-risk" step="1" min="1" max="20" placeholder="5" class="inp w-full p-3 rounded-xl text-sm"></div>
+                    <div><label class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">Max Leverage</label><input type="number" id="set-lev" step="1" min="1" max="20" placeholder="5" class="inp w-full p-3 rounded-xl text-sm"></div>
+                    <div><label class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">Min Confidence</label><input type="number" id="set-conf" step="5" min="40" max="90" placeholder="55" class="inp w-full p-3 rounded-xl text-sm"></div>
+                    <div><label class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">Max DD Stop</label><input type="number" id="set-dd" step="1" min="5" max="50" placeholder="20" class="inp w-full p-3 rounded-xl text-sm"></div>
+                </div>
+            </div>
+
+            <div class="glass rounded-3xl p-6">
+                <h2 class="text-white font-bold text-sm mb-4 uppercase tracking-wider">Open Positions</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs"><thead><tr class="text-slate-600 uppercase tracking-wider border-b border-white/5"><th class="text-left py-3 font-bold">Symbol</th><th class="text-left py-3 font-bold">Side</th><th class="text-right py-3 font-bold">Size</th><th class="text-right py-3 font-bold">Entry</th><th class="text-right py-3 font-bold">Mark</th><th class="text-right py-3 font-bold">PnL</th></tr></thead>
+                    <tbody id="pos-body"><tr><td colspan="6" class="text-center py-8 text-slate-600">Loading...</td></tr></tbody></table>
+                </div>
+            </div>
+
+            <div class="glass rounded-3xl p-6">
+                <h2 class="text-white font-bold text-sm mb-4 uppercase tracking-wider">Trade Log</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs"><thead><tr class="text-slate-600 uppercase tracking-wider border-b border-white/5"><th class="text-left py-3 font-bold">Time</th><th class="text-left py-3 font-bold">Symbol</th><th class="text-left py-3 font-bold">Side</th><th class="text-right py-3 font-bold">Entry</th><th class="text-right py-3 font-bold">Qty</th><th class="text-right py-3 font-bold">Notional</th></tr></thead>
+                    <tbody id="hist-body"><tr><td colspan="6" class="text-center py-8 text-slate-600">No trades yet</td></tr></tbody></table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+const API = '/api';
+
+function toast(m) { const e = document.getElementById('toast'); e.textContent = m; e.classList.add('show'); setTimeout(() => e.classList.remove('show'), 2500); }
+
+async function apiFetch(path, opts = {}) {
+    try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 25000);
+        const r = await fetch(API + path, { signal: ctrl.signal, ...opts });
+        clearTimeout(tid);
+        return r.json().catch(() => ({ ok: false }));
+    } catch (e) { return { ok: false, error: 'timeout' }; }
+}
+
+async function loadStatus() {
+    const r = await apiFetch('/trade/status');
+    const noKey = document.getElementById('no-binance');
+    const trader = document.getElementById('trader-section');
+    if (!r.ok || !r.connected) { noKey.classList.remove('hidden'); trader.classList.add('hidden'); return; }
+    noKey.classList.add('hidden'); trader.classList.remove('hidden');
+
+    const eq = r.equity || {};
+    const bal = eq.balance || 0;
+    document.getElementById('eq-val').textContent = '$' + bal.toLocaleString();
+    const dd = eq.drawdown_pct || 0;
+    document.getElementById('dd-val').innerHTML = `<span class="${dd > 15 ? 'neg' : ''}">${dd.toFixed(1)}%</span>`;
+
+    // LLM + ML status
+    try {
+        const [llmRes, mlRes] = await Promise.all([apiFetch('/settings'), apiFetch('/learning')]);
+        const llmActive = llmRes.ok && llmRes.settings && llmRes.settings.llm_key_set;
+        document.getElementById('llm-status-val').innerHTML = llmActive 
+            ? '<span class="pos">' + (llmRes.settings.llm_model || 'Active') + '</span>' 
+            : '<span class="text-slate-500">Off</span>';
+        // ML status
+        if (mlRes.ok && mlRes.model_status) {
+            const ms = mlRes.model_status;
+            const mlInfo = ms.trained ? `WR ${ms.wr_out_of_sample}%` : 'Not trained';
+            document.getElementById('llm-status-val').innerHTML += `<div class="text-[9px] text-slate-500">ML: ${mlInfo}</div>`;
+        }
+    } catch(e) { document.getElementById('llm-status-val').textContent = '--'; }
+
+    if (r.running) {
+        document.getElementById('trader-status').innerHTML = '<span class="dot dot-on pulse"></span>Running';
+        document.getElementById('btn-start').classList.add('hidden');
+        document.getElementById('btn-stop').classList.remove('hidden');
+        loadPositions();
+    } else {
+        document.getElementById('trader-status').innerHTML = '<span class="dot dot-off"></span>Stopped';
+        document.getElementById('btn-start').classList.remove('hidden');
+        document.getElementById('btn-stop').classList.add('hidden');
+    }
+}
+
+async function startTrading() {
+    const m = document.getElementById('trade-msg'), b = document.getElementById('btn-start');
+    b.disabled = true; b.style.opacity = '0.4';
+    m.innerHTML = '<span class="text-slate-400">Starting...</span>';
+    const s = {
+        risk_per_trade_pct: parseFloat(document.getElementById('set-risk').value) || 5,
+        max_leverage: parseInt(document.getElementById('set-lev').value) || 5,
+        min_confidence: parseInt(document.getElementById('set-conf').value) || 55,
+        stop_trading_at_dd: parseFloat(document.getElementById('set-dd').value) || 20,
+    };
+    const r = await apiFetch('/trade/start', { method: 'POST', body: JSON.stringify(s), headers: { 'Content-Type': 'application/json' } });
+    if (r.ok) {
+        const llmActive = document.getElementById('llm-status-val').textContent === 'Active';
+        const mode = llmActive ? 'LLM Agent Mode' : 'Quant-Only Mode';
+        const bal = document.getElementById('eq-val').textContent;
+        const smallCap = parseFloat(bal.replace(/[^0-9.]/g,'')) < 50 ? ' (Small Capital)' : '';
+        toast('Auto-trader started: ' + mode + smallCap);
+        m.innerHTML = `<span class="pos">Running - ${mode}${smallCap}</span>`;
+    } else { b.disabled = false; b.style.opacity = '1'; m.innerHTML = `<span class="neg">${r.error || 'Failed to start'}</span>`; }
+    loadStatus();
+}
+
+async function stopTrading() {
+    const m = document.getElementById('trade-msg');
+    m.innerHTML = '<span class="text-slate-400">Stopping...</span>';
+    const r = await apiFetch('/trade/stop', { method: 'POST' });
+    if (r.ok) { toast('Auto-trader stopped'); m.innerHTML = ''; }
+    else m.innerHTML = `<span class="neg">${r.error || 'Failed'}</span>`;
+    loadStatus();
+}
+
+// Poll status + positions every 10 seconds
+loadStatus();
+setInterval(loadStatus, 10000);
+setInterval(loadTradeLog, 15000);
+loadTradeLog();
+
+async function loadPositions() {
+    try {
+        const r = await apiFetch('/account/positions');
+        const tb = document.getElementById('pos-body');
+        if (r.ok && r.positions && r.positions.length) {
+            tb.innerHTML = r.positions.map(p => `<tr class="border-b border-white/[0.02] hover:bg-white/[0.01]">
+                <td class="py-3 text-white font-medium">${p.symbol}</td>
+                <td class="py-3 font-bold ${p.side==='LONG'?'pos':'neg'}">${p.side}</td>
+                <td class="py-3 text-right">${parseFloat(p.size).toFixed(4)}</td>
+                <td class="py-3 text-right text-white">$${parseFloat(p.entry).toLocaleString()}</td>
+                <td class="py-3 text-right text-white">$${parseFloat(p.mark).toLocaleString()}</td>
+                <td class="py-3 text-right font-bold ${p.pnl>=0?'pos':'neg'}">${p.pnl>=0?'+':''}$${Math.abs(p.pnl).toLocaleString()}</td>
+            </tr>`).join('');
+        } else {
+            tb.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-600">No open positions</td></tr>';
+        }
+    } catch(e) { /* silent */ }
+}
+
+async function loadTradeLog() {
+    const r = await apiFetch('/trade/status');
+    const tb = document.getElementById('hist-body');
+    const log = r.trade_log || [];
+    if (log.length) {
+        tb.innerHTML = log.map(t => {
+            const time = (t.time || '').slice(11, 19);
+            const isClose = t.side === 'CLOSE' || t.result;
+            const result = t.result || '';
+            const resultCls = result === 'WIN' ? 'pos' : result === 'LOSS' ? 'neg' : '';
+            return `<tr class="border-b border-white/[0.02] hover:bg-white/[0.01]">
+                <td class="py-3 text-slate-500 text-[10px]">${time}</td>
+                <td class="py-3 text-white font-medium">${t.symbol}</td>
+                <td class="py-3 font-bold ${isClose ? 'text-amber-400' : (t.side==='LONG'||t.side==='buy'?'pos':'neg')}">${t.side}</td>
+                <td class="py-3 text-right text-white">${t.entry > 0 ? '$'+parseFloat(t.entry).toLocaleString() : '-'}</td>
+                <td class="py-3 text-right text-slate-400">${t.qty > 0 ? parseFloat(t.qty).toFixed(4) : '-'}</td>
+                <td class="py-3 text-right ${resultCls}">${result || '$'+parseFloat(t.notional||0).toFixed(2)}</td>
+            </tr>`;
+        }).join('');
+    } else {
+        tb.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-600">No trades executed yet</td></tr>';
+    }
+}
+</script>
+</body>
+</html>

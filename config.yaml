@@ -1,0 +1,160 @@
+api:
+  api_key: coin-screener-secret-key-2026
+  auth_enabled: true
+factor_weights:
+  breakout: 0.1
+  funding: 0.1
+  mean_reversion: 0.15
+  momentum: 0.15
+  orderflow: 0.15
+  pattern: 0.1
+  sentiment: 0.1
+  volume: 0.15
+logging:
+  file: data/api.log
+  level: INFO
+market_filter:
+  candle_confirm:
+    confidence_penalty: 10
+    contrarian_penalty: 15
+    enabled: true
+    mode: reduce_confidence
+  funding:
+    max_rate_pct: 0.05
+    negative_warn_pct: -0.03
+microstructure:
+  cache_ttl_seconds: 60
+  enabled: true
+  enhanced_symbols: null
+  liquidation:
+    cascade_block_usd: 3000000
+    cascade_warning_usd: 500000
+    window_minutes: 15
+  orderbook:
+    depth_levels: 100
+    wall_proximity_pct: 1.5
+    wall_threshold_usd: 500000
+  risk:
+    cascade_min_score: 30
+    divergence_penalty: 15
+    extreme_sentiment_threshold: 75
+  whale:
+    extreme_position_ratio: 0.7
+    position_flip_threshold: 0.1
+    trade_threshold_usd: 100000
+ml:
+  lookback_days: 60
+  min_samples: 50
+  retrain_day: sat
+  retrain_hour: 3
+  retrain_minute: 0
+regime:
+  adx_threshold: 25
+  atr_period: 14
+  vol_lookback: 20
+risk:
+  max_risk_pct: 0.02
+  sl_atr_multiplier: 1.5
+  tp_atr_multiplier: 3.0
+scan:
+  auto_discover: false
+  interval_minutes: 5
+  kline_limit: 200
+  min_quote_volume: 5000000
+  squeeze_threshold: 0.05
+sessions:
+  asia:
+    end_utc: 8
+    start_utc: 0
+  enabled: true
+  london:
+    end_utc: 16
+    start_utc: 8
+  london_ny_overlap:
+    end_utc: 16
+    start_utc: 13
+  new_york:
+    end_utc: 22
+    start_utc: 13
+signal:
+  high_confidence: 65
+  long_min_score: 56
+  require_clear_regime: false
+  require_volume_confirm: false
+  short_min_score: 44
+symbols:
+- BTCUSDT
+- ETHUSDT
+- BNBUSDT
+- SOLUSDT
+- XRPUSDT
+- DOGEUSDT
+- ADAUSDT
+- AVAXUSDT
+- LINKUSDT
+- DOTUSDT
+- ATOMUSDT
+- NEARUSDT
+- FILUSDT
+- UNIUSDT
+- AAVEUSDT
+- ARBUSDT
+- OPUSDT
+- INJUSDT
+- FETUSDT
+- RENDERUSDT
+- 1000PEPEUSDT
+- WIFUSDT
+- 1000FLOKIUSDT
+- SUIUSDT
+- SEIUSDT
+- APTUSDT
+- TIAUSDT
+- ONDOUSDT
+- STXUSDT
+- ORDIUSDT
+telegram:
+  bot_token: ''
+  chat_id: ''
+  enabled: true
+  ml_status: true
+  scan_summary: true
+  signal_alerts: true
+  wr_update: true
+timeframe_weights:
+  15m: 0.6
+  1h: 0.3
+  4h: 0.1
+timeframes:
+- 15m
+- 1h
+- 4h
+wr_tracking:
+  max_consecutive_losses: 8
+  min_trades_for_daily: 5
+  profit_factor_alert: 1.5
+  rolling_window_days: 30
+
+llm:
+  provider: openrouter
+  model: deepseek/deepseek-chat-v4:free
+  base_url: https://openrouter.ai/api/v1
+  api_key: ""
+
+debate:
+  enabled: true
+  min_confidence: 50
+  max_rounds: 3
+
+risk_gate:
+  max_drawdown_pct: 20
+  circuit_breaker_losses: 3
+  max_trades_per_day: 5
+  max_overrides_per_day: 3
+  llm_override_confidence_min: 70
+  min_confidence: 55
+  max_correlation_exposure: 0.3
+  blacklist: []
+
+vault:
+  dir: vault

@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account — Coin Screener</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@1.14.0/dist/umd/lucide.min.js" defer></script>
+    <style>
+        * { font-family: 'Inter', sans-serif; margin: 0; padding: 0; box-sizing: border-box; }
+        body { background-color: #040608; color: #64748b; min-height: 100vh; }
+        .glass { background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .btn-p { background: rgba(255, 255, 255, 0.08); color: #f8fafc; transition: all 0.2s; border: 1px solid rgba(255, 255, 255, 0.1); cursor: pointer; }
+        .btn-p:hover { background: rgba(255, 255, 255, 0.14); }
+        .btn-s { background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2); cursor: pointer; }
+        .btn-s:hover { background: rgba(16, 185, 129, 0.2); }
+        .btn-d { background: rgba(244, 63, 94, 0.12); color: #f43f5e; border: 1px solid rgba(244, 63, 94, 0.2); cursor: pointer; }
+        .btn-d:hover { background: rgba(244, 63, 94, 0.2); }
+        .btn-a { background: rgba(249, 115, 22, 0.12); color: #f97316; border: 1px solid rgba(249, 115, 22, 0.2); cursor: pointer; }
+        .btn-a:hover { background: rgba(249, 115, 22, 0.2); }
+        .btn-b { background: rgba(99, 102, 241, 0.12); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.2); cursor: pointer; }
+        .btn-b:hover { background: rgba(99, 102, 241, 0.2); }
+        .inp { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06); color: #f8fafc; transition: border-color 0.2s; }
+        .inp:focus { outline: none; border-color: rgba(255, 255, 255, 0.2); }
+        .inp::placeholder { color: #334155; }
+        .pos { color: #10b981; }
+        .neg { color: #f43f5e; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+        .dot-on { background: #10b981; box-shadow: 0 0 8px rgba(16, 185, 129, 0.4); }
+        .dot-off { background: #f43f5e; }
+        .pulse { animation: pulse 2s infinite; } @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .bg-blob-1 { position: fixed; top: -10%; right: -10%; width: 600px; height: 600px; background: radial-gradient(circle, rgba(56, 189, 248, 0.04) 0%, transparent 70%); filter: blur(100px); z-index: 0; pointer-events: none; border-radius: 50%; }
+        .bg-blob-2 { position: fixed; bottom: -10%; left: -10%; width: 800px; height: 800px; background: radial-gradient(circle, rgba(139, 92, 246, 0.03) 0%, transparent 70%); filter: blur(120px); z-index: 0; pointer-events: none; border-radius: 50%; }
+        #toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%) translateY(12px); background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(255,255,255,0.08); color: #f8fafc; font-size: 12px; font-weight: 600; padding: 10px 24px; border-radius: 100px; opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s; z-index: 9999; white-space: nowrap; }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+        /* Icon Dock Navigation — same style as dashboard */
+        .dock-container {
+            position: fixed; left: 24px; top: 50%; transform: translateY(-50%);
+            display: flex; flex-direction: column; align-items: center; gap: 8px;
+            padding: 10px; z-index: 1000;
+            background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(32px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.08); border-right: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 28px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5), inset 0 0 20px rgba(255,255,255,0.02);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .dock-container:hover { background: rgba(255, 255, 255, 0.05); padding: 10px; gap: 12px; }
+        .dock-item {
+            position: relative; width: 48px; height: 48px; border-radius: 20px;
+            color: #94a3b8; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            background: transparent;
+        }
+        .dock-item:hover { color: #fff; background: rgba(255, 255, 255, 0.1); transform: scale(1.2); }
+        .dock-item.active { color: #fff; background: rgba(255, 255, 255, 0.12); box-shadow: 0 0 15px rgba(255,255,255,0.08); }
+        .dock-item .label {
+            position: absolute; left: 120%; top: 50%; transform: translateY(-50%) translateX(-8px);
+            padding: 6px 12px; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.1); color: #fff; font-size: 10px;
+            font-weight: 700; border-radius: 10px; opacity: 0; pointer-events: none;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); white-space: nowrap;
+        }
+        .dock-item:hover .label { opacity: 1; transform: translateY(-50%) translateX(0); }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* Toggle Switch */
+        .toggle { position: relative; width: 44px; height: 24px; display: inline-block; }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.08); border-radius: 24px; transition: 0.3s; }
+        .toggle .slider:before { content: ""; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #64748b; border-radius: 50%; transition: 0.3s; }
+        .toggle input:checked + .slider { background: rgba(16,185,129,0.3); }
+        .toggle input:checked + .slider:before { background: #10b981; transform: translateX(20px); }
+
+        select.option { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); color: #f8fafc; padding: 10px 12px; border-radius: 12px; font-size: 13px; width: 100%; cursor: pointer; }
+        select.option option { background: #0f172a; color: #e2e8f0; }
+    </style>
+</head>
+<body class="relative overflow-x-hidden">
+    <div class="bg-blob-1"></div><div class="bg-blob-2"></div><div id="toast"></div>
+
+    <div class="relative z-10 max-w-3xl mx-auto p-4 md:p-8 pb-24 pl-24">
+        <header class="text-center py-10">
+            <h1 class="text-5xl font-black text-white tracking-tighter">Account</h1>
+            <p class="text-sm text-slate-600 mt-2">Connect · Configure · Control</p>
+            <a href="/" class="inline-block mt-4 text-xs text-slate-500 hover:text-white transition-colors">← Back to Screener</a>
+        </header>
+
+        <!-- IP + Status Bar (hidden when connected) -->
+        <div id="login-bar" class="glass rounded-2xl p-4 mb-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <span class="text-[10px] text-slate-600 uppercase font-bold tracking-widest">Server IP</span>
+                <code id="server-ip" class="text-white font-mono text-sm bg-white/5 px-3 py-1 rounded-lg">Detecting...</code>
+            </div>
+            <div class="flex items-center gap-4">
+                <span id="conn-badge-sm"><span class="dot dot-off"></span><span class="text-xs text-slate-500">Binance</span></span>
+                <button onclick="copyIP()" class="text-xs text-slate-500 hover:text-white transition-colors">Copy IP</button>
+            </div>
+        </div>
+
+        <!-- Icon Dock Navigation -->
+        <nav class="dock-container" id="tab-bar">
+            <div class="dock-item active" data-tab="connect">
+                <i data-lucide="key" class="w-5 h-5"></i>
+                <span class="label">Connect</span>
+            </div>
+            <div class="dock-item" data-tab="settings">
+                <i data-lucide="settings" class="w-5 h-5"></i>
+                <span class="label">Settings</span>
+            </div>
+            <div class="dock-item" data-tab="agent">
+                <i data-lucide="bot" class="w-5 h-5"></i>
+                <span class="label">Agent</span>
+            </div>
+            <div class="dock-item" data-tab="hivemind">
+                <i data-lucide="globe" class="w-5 h-5"></i>
+                <span class="label">HiveMind</span>
+            </div>
+        </nav>
+
+        <!-- TAB: Connect ────────────────────────────────────── -->
+        <div class="tab-panel active" id="panel-connect">
+            <div id="connected-section" class="hidden space-y-6">
+                <div class="flex justify-end">
+                    <button onclick="doDisconnect()" class="btn-d px-4 py-3 rounded-xl text-xs font-bold tracking-wide uppercase">Disconnect</button>
+                </div>
+                <div class="glass rounded-3xl p-6">
+                    <h2 class="text-white font-bold text-sm mb-4 uppercase tracking-wider">Balance</h2>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="bal-cards"></div>
+                </div>
+                <div class="glass rounded-3xl p-6">
+                    <h2 class="text-white font-bold text-sm mb-4 uppercase tracking-wider">Open Positions</h2>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs"><thead><tr class="text-slate-600 uppercase tracking-wider border-b border-white/5"><th class="text-left py-3 font-bold">Symbol</th><th class="text-left py-3 font-bold">Side</th><th class="text-right py-3 font-bold">Size</th><th class="text-right py-3 font-bold">Entry</th><th class="text-right py-3 font-bold">Mark</th><th class="text-right py-3 font-bold">PnL</th></tr></thead>
+                        <tbody id="pos-body"><tr><td colspan="6" class="text-center py-8 text-slate-600">No open positions</td></tr></tbody></table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="login-section" class="glass rounded-3xl p-6 mb-6">
+                <h2 class="text-white font-bold text-sm mb-4 uppercase tracking-wider">Binance API Key</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                    <div><label class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">API Key</label><input type="password" id="api-key" placeholder="Paste API Key" class="inp w-full p-3 rounded-xl text-sm" autocomplete="off"></div>
+                    <div><label class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">Secret Key</label><input type="password" id="api-secret" placeholder="Paste Secret Key" class="inp w-full p-3 rounded-xl text-sm" autocomplete="off"></div>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="doConnect()" class="btn-s px-6 py-3 rounded-xl text-xs font-bold tracking-wide uppercase flex-1">Connect & Test</button>
+                </div>
+                <div id="key-msg" class="mt-3 text-xs text-center"></div>
+            </div>
+        </div>
+
+        <!-- TAB: Settings ──────────────────────────────────── -->
+        <div class="tab-panel" id="panel-settings">
+            <!-- LLM Config -->
+            <div class="glass rounded-3xl p-6 mb-6">
+                <h2 class="text-white font-bold text-sm mb-4 uppercase tracking-wider">LLM Model</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">Provider</label>
+                        <select id="llm-provider" class="option" onchange="onProviderChange()">
+                            <option value="openrouter">OpenRouter (free + paid models)</option>
+                            <option value="openai">OpenAI Direct</option>
+                            <option value="groq">Groq</option>
+                            <option value="ollama">Ollama (Local)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">API URL</label>
+                        <input type="text" id="llm-url" value="https://openrouter.ai/api/v1" class="inp w-full p-3 rounded-xl text-sm" readonly>
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">Model</label>
+                        <select id="llm-model" class="option">
+                            <option value="google/gemini-2.0-flash-001">🆓 Gemini Flash 2.0</option>
+                            <option value="deepseek/deepseek-chat-v3-0324:free">🆓 DeepSeek V3</option>
+                            <option value="openai/gpt-4o-mini">💎 GPT-4o Mini</option>
+                            <option value="openai/gpt-4o">💎 GPT-4o</option>
+                            <option value="anthropic/claude-sonnet-4-20250514">💎 Claude Sonnet 4</option>
+                            <option value="">⚫ None (quant-only)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">API Key</label>
+                        <input type="password" id="llm-key" placeholder="sk-or-v1-..." class="inp w-full p-3 rounded-xl text-sm" autocomplete="off">
+                    </div>
+                    <div class="flex gap-3 items-center flex-wrap">
+                        <button onclick="saveSettings('llm')" class="btn-b px-6 py-3 rounded-xl text-xs font-bold tracking-wide uppercase">Save LLM</button>
+                        <button onclick="testLLM()" class="btn-p px-4 py-3 rounded-xl text-xs font-bold tracking-wide uppercase">Test</button>
+                        <span id="llm-status" class="flex items-center gap-2 text-xs"><span class="dot dot-off"></span>Offline</span>
+                    </div>
+                    <div id="llm-info" class="hidden mt-3 text-xs text-slate-400"></div>
+                </div>
+            </div>
+
+            <!-- Telegram Config -->
+            <div class="glass rounded-3xl p-6 mb-6">
+                <h2 class="text-white font-bold text-sm mb-4 uppercase tracking-wider">Telegram Bot</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">Bot Token</label>
+                        <input type="password" id="tg-token" placeholder="123456:ABC..." class="inp w-full p-3 rounded-xl text-sm" autocomplete="off">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">Chat ID</label>
+                        <input type="text" id="tg-chat" placeholder="-100123..." class="inp w-full p-3 rounded-xl text-sm">
+                    </div>
+                    <div class="flex gap-3 items-center">
+                        <button onclick="saveSettings('telegram')" class="btn-b px-6 py-3 rounded-xl text-xs font-bold tracking-wide uppercase">Save Telegram</button>
+                        <span id="tg-status" class="text-xs text-slate-500">Not set</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Signal Config -->
+            <div class="glass rounded-3xl p-6 mb-6">
+                <h2 class="text-white font-bold text-sm mb-4 uppercase tracking-wider">Signal Thresholds</h2>
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">LONG ≥</label>
+                        <div class="flex gap-2">
+                            <button onclick="stepThreshold('long',-1)" class="btn-p px-3 py-2 rounded-xl text-xs">−</button>
+                            <input type="number" id="set-long" value="56" min="50" max="80" class="inp w-full p-2 rounded-xl text-sm text-center">
+                            <button onclick="stepThreshold('long',1)" class="btn-p px-3 py-2 rounded-xl text-xs">+</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">SHORT ≤</label>
+                        <div class="flex gap-2">
+                            <button onclick="stepThreshold('short',-1)" class="btn-p px-3 py-2 rounded-xl text-xs">−</button>
+                            <input type="number" id="set-short" value="44" min="20" max="50" class="inp w-full p-2 rounded-xl text-sm text-center">
+                            <button onclick="stepThreshold('short',1)" class="btn-p px-3 py-2 rounded-xl text-xs">+</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">Confidence Floor</label>
+                        <input type="number" id="set-floor" value="35" min="20" max="60" class="inp w-full p-2 rounded-xl text-sm text-center">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">Scan Interval (min)</label>
+                        <input type="number" id="set-interval" value="5" min="1" max="60" class="inp w-full p-2 rounded-xl text-sm text-center">
+                    </div>
+                </div>
+                <div class="flex gap-3 items-center">
+                    <button onclick="saveSettings('thresholds')" class="btn-b px-6 py-3 rounded-xl text-xs font-bold tracking-wide uppercase">Save Thresholds</button>
+                    <span id="th-status" class="text-xs text-slate-500"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: Agent ─────────────────────────────────────── -->
+        <div class="tab-panel" id="panel-agent">
+            <!-- Agent Status -->
+            <div class="glass rounded-3xl p-6 mb-6">
+                <h2 class="text-white font-bold text-sm mb-4 uppercase tracking-wider">Agent Status</h2>
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div class="glass rounded-2xl p-4 flex items-center justify-between">
+                        <span class="text-xs text-white font-medium">Screener Agent</span>
+                        <label class="toggle"><input type="checkbox" id="agent-screener" checked onchange="toggleAgent()"><span class="slider"></span></label>
+                    </div>
+                    <div class="glass rounded-2xl p-4 flex items-center justify-between">
+                        <span class="text-xs text-white font-medium">Manager Agent</span>
+                        <label class="toggle"><input type="checkbox" id="agent-manager" checked onchange="toggleAgent()"><span class="slider"></span></label>
+                    </div>
+                    <div class="glass rounded-2xl p-4 flex items-center justify-between">
+                        <span class="text-xs text-white font-medium">Auto-Execute (HIGH conf)</span>
+                        <label class="toggle"><input type="checkbox" id="agent-autoexec" checked onchange="toggleAgent()"><span class="slider"></span></label>
+                    </div>
+                    <div class="glass rounded-2xl p-4 flex items-center justify-between">
+                        <span class="text-xs text-white font-medium">LLM Decide (AMBIGUOUS)</span>
+                        <label class="toggle"><input type="checkbox" id="agent-llm" checked onchange="toggleAgent()"><span class="slider"></span></label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Lessons -->
+            <div class="glass rounded-3xl p-6 mb-6">
+                <h2 class="text-white font-bold text-sm mb-4 uppercase tracking-wider">Recent Lessons</h2>
+                <div id="lessons-list" class="space-y-2 max-h-64 overflow-y-auto">
+                    <div class="text-xs text-slate-500 py-4 text-center">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Recent Decisions -->
+            <div class="glass rounded-3xl p-6">
+                <h2 class="text-white font-bold text-sm mb-4 uppercase tracking-wider">Recent Decisions</h2>
+                <div id="decisions-list" class="space-y-2 max-h-64 overflow-y-auto">
+                    <div class="text-xs text-slate-500 py-4 text-center">Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: HiveMind ──────────────────────────────────── -->
+        <div class="tab-panel" id="panel-hivemind">
+            <div class="glass rounded-3xl p-6 mb-6">
+                <h2 class="text-white font-bold text-sm mb-4 uppercase tracking-wider">Swarm Connection</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">HiveMind Server URL</label>
+                        <input type="text" id="hm-url" placeholder="https://your-server.com" class="inp w-full p-3 rounded-xl text-sm">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">Agent ID</label>
+                        <input type="text" id="hm-agent" readonly class="inp w-full p-3 rounded-xl text-sm opacity-50 cursor-default" value="Generating...">
+                    </div>
+                    <div class="flex gap-3">
+                        <button onclick="saveHiveMind()" class="btn-b px-6 py-3 rounded-xl text-xs font-bold tracking-wide uppercase">Connect Swarm</button>
+                        <button onclick="pullHiveMind()" class="btn-p px-4 py-3 rounded-xl text-xs font-bold tracking-wide uppercase">Pull Lessons</button>
+                    </div>
+                    <div id="hm-status" class="flex items-center gap-2 text-xs">
+                        <span class="dot dot-off"></span>Not connected to swarm
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass rounded-3xl p-6">
+                <h2 class="text-white font-bold text-sm mb-4 uppercase tracking-wider">Crowd Stats</h2>
+                <div class="grid grid-cols-3 gap-3" id="hm-stats">
+                    <div class="glass rounded-xl p-3 text-center"><div class="text-[10px] text-slate-600 font-bold tracking-wider">Agents</div><div class="text-white font-bold text-lg">—</div></div>
+                    <div class="glass rounded-xl p-3 text-center"><div class="text-[10px] text-slate-600 font-bold tracking-wider">Lessons</div><div class="text-white font-bold text-lg">—</div></div>
+                    <div class="glass rounded-xl p-3 text-center"><div class="text-[10px] text-slate-600 font-bold tracking-wider">Trades</div><div class="text-white font-bold text-lg">—</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+const API = '/api';
+let currentTab = 'connect';
+
+function toast(m) { const e = document.getElementById('toast'); e.textContent = m; e.classList.add('show'); setTimeout(() => e.classList.remove('show'), 2500); }
+async function apiFetch(path, opts = {}) {
+    try { const ctrl = new AbortController(); const tid = setTimeout(() => ctrl.abort(), 25000); const r = await fetch(API + path, { signal: ctrl.signal, ...opts }); clearTimeout(tid); return r.json().catch(() => ({ ok: false })); }
+    catch (e) { return { ok: false, error: 'timeout' }; }
+}
+
+// ── Tab Navigation (dock-style) ─────────────────────────────
+document.getElementById('tab-bar').addEventListener('click', (e) => {
+    const item = e.target.closest('.dock-item');
+    if (!item) return;
+    document.querySelectorAll('.dock-item').forEach(i => i.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    item.classList.add('active');
+    const panel = document.getElementById('panel-' + item.dataset.tab);
+    if (panel) { panel.classList.add('active'); currentTab = item.dataset.tab; }
+    if (currentTab === 'agent') loadAgentData();
+    if (currentTab === 'hivemind') loadHiveMindData();
+});
+
+// ── IP ──────────────────────────────────────────────────────
+(async function loadIP() {
+    const el = document.getElementById('server-ip');
+    const r = await apiFetch('/account/ip');
+    if (r.ok && r.ip) { el.textContent = r.ip; el.style.cursor = 'pointer'; el.onclick = () => copyIP(); }
+    else el.textContent = 'Unavailable';
+})();
+async function copyIP() { const ip = document.getElementById('server-ip').textContent; if (ip && ip !== 'Detecting...' && ip !== 'Unavailable') { await navigator.clipboard.writeText(ip); toast('IP copied: ' + ip); } }
+
+// ── Balance + Positions ─────────────────────────────────────
+async function loadStatus() {
+    const r = await apiFetch('/account/status');
+    const section = document.getElementById('connected-section');
+    const loginBar = document.getElementById('login-bar');
+    const loginForm = document.getElementById('login-section');
+    const badge = document.getElementById('conn-badge-sm');
+    if (r.connected) {
+        if (badge) badge.innerHTML = '<span class="dot dot-on"></span><span class="text-xs text-emerald-400">Connected</span>';
+        section.classList.remove('hidden');
+        if (loginBar) loginBar.classList.add('hidden');
+        if (loginForm) loginForm.classList.add('hidden');
+        loadBalance(); loadPositions();
+    } else {
+        if (badge) badge.innerHTML = '<span class="dot dot-off"></span><span class="text-xs text-slate-500">Binance</span>';
+        section.classList.add('hidden');
+        if (loginBar) loginBar.classList.remove('hidden');
+        if (loginForm) loginForm.classList.remove('hidden');
+    }
+}
+async function doConnect() {
+    const ak = document.getElementById('api-key').value.trim(), sk = document.getElementById('api-secret').value.trim(), m = document.getElementById('key-msg');
+    if (!ak || !sk) { m.innerHTML = '<span class="neg">Both fields required</span>'; return; }
+    m.innerHTML = '<span class="text-slate-400">Testing...</span>';
+    const fd = new URLSearchParams(); fd.append('api_key', ak); fd.append('secret', sk);
+    const r = await apiFetch('/account/connect', { method: 'POST', body: fd });
+    if (r.ok) { toast('Connected'); document.getElementById('api-key').value = ''; document.getElementById('api-secret').value = ''; m.innerHTML = '<span class="pos">Connected</span>'; loadStatus(); }
+    else m.innerHTML = `<span class="neg">${r.error || 'Failed'}</span>`;
+}
+async function doDisconnect() { await apiFetch('/account/disconnect', { method: 'POST' }); toast('Disconnected'); loadStatus(); }
+
+async function loadBalance(retries = 2) {
+    const c = document.getElementById('bal-cards');
+    c.innerHTML = '<div class="col-span-4 text-xs text-slate-400 text-center py-4">Loading...</div>';
+    for (let i = 0; i <= retries; i++) {
+        const r = await apiFetch('/account/balance');
+                if (r.ok && r.balance) {
+            const b = r.balance, u = b.unrealized_pnl || 0;
+            if (b.total === 0 && b.free === 0 && b.used === 0) {
+                c.innerHTML = '<div class="col-span-4 text-xs text-slate-400 text-center py-4">Syncing balance from Binance...</div>';
+                return;
+            } c.innerHTML = `<div class="glass rounded-xl p-4 text-center"><div class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">Total</div><div class="text-white font-bold text-lg">$${(b.total||0).toLocaleString()}</div></div><div class="glass rounded-xl p-4 text-center"><div class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">Free</div><div class="text-white font-bold text-lg">$${(b.free||0).toLocaleString()}</div></div><div class="glass rounded-xl p-4 text-center"><div class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">Used</div><div class="text-white font-bold text-lg">$${(b.used||0).toLocaleString()}</div></div><div class="glass rounded-xl p-4 text-center"><div class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">PnL</div><div class="font-bold text-lg ${u>=0?'pos':'neg'}">${u>=0?'+':''}$${Math.abs(u).toLocaleString()}</div></div>`; return; }
+        if (i < retries) await new Promise(r => setTimeout(r, 2000));
+    }
+    c.innerHTML = '<div class="col-span-4 text-xs text-slate-600 text-center py-4">Unable to load</div>';
+}
+async function loadPositions(retries = 2) {
+    const tb = document.getElementById('pos-body');
+    for (let i = 0; i <= retries; i++) {
+        const r = await apiFetch('/account/positions');
+        if (r.ok && r.positions) { if (!r.positions.length) { tb.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-600">No open positions</td></tr>'; return; } tb.innerHTML = r.positions.map(p => `<tr class="border-b border-white/[0.02] hover:bg-white/[0.01]"><td class="py-3 text-white font-medium">${p.symbol}</td><td class="py-3 font-bold ${p.side==='LONG'?'pos':'neg'}">${p.side}</td><td class="py-3 text-right">${parseFloat(p.size).toFixed(4)}</td><td class="py-3 text-right text-white">$${parseFloat(p.entry).toLocaleString()}</td><td class="py-3 text-right text-white">$${parseFloat(p.mark).toLocaleString()}</td><td class="py-3 text-right font-bold ${p.pnl>=0?'pos':'neg'}">${p.pnl>=0?'+':''}$${Math.abs(p.pnl).toLocaleString()}</td></tr>`).join(''); return; }
+        if (i < retries) await new Promise(r => setTimeout(r, 2000));
+    }
+    tb.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-600">No open positions</td></tr>';
+}
+
+// ── Settings Tab ────────────────────────────────────────────
+const PROVIDERS = {
+    openrouter: { url: 'https://openrouter.ai/api/v1', models: [
+        'google/gemini-2.0-flash-001', 'deepseek/deepseek-chat-v3-0324:free',
+        'openai/gpt-4o-mini', 'openai/gpt-4o', 'anthropic/claude-sonnet-4-20250514', ''
+    ]},
+    openai: { url: 'https://api.openai.com/v1', models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', ''] },
+    groq: { url: 'https://api.groq.com/openai/v1', models: ['llama-4-maverick-17b-128e-instruct', 'mixtral-8x7b-32768', ''] },
+    local: { url: 'http://localhost:11434/v1', models: ['llama3.1', 'mistral', ''] },
+    ollama: { url: 'http://localhost:11434/v1', models: ['llama3.1', 'mistral', ''] },
+};
+function onProviderChange() {
+    const p = document.getElementById('llm-provider').value;
+    const cfg = PROVIDERS[p];
+    document.getElementById('llm-url').value = cfg.url;
+    // Fetch models from API
+    fetchModels(p);
+}
+async function fetchModels(provider) {
+    const sel = document.getElementById('llm-model');
+    sel.innerHTML = '<option>Loading...</option>';
+    const r = await apiFetch('/llm/models?provider=' + provider);
+    if (r.ok && r.models) {
+        sel.innerHTML = r.models.map(m => `<option value="${m.id}">${m.cost==='free'?'FREE':'$'} ${m.name}</option>`).join('');
+        sel.innerHTML += '<option value="">None (quant-only)</option>';
+        return r.models;
+    }
+    sel.innerHTML = '<option value="">Failed to load</option>';
+    return [];
+}
+function stepThreshold(type, delta) {
+    const el = document.getElementById('set-' + type);
+    el.value = Math.max(type === 'long' ? 50 : 20, Math.min(type === 'long' ? 80 : 50, parseInt(el.value) + delta));
+}
+async function saveSettings(section) {
+    const body = {}, statusEl = document.getElementById(section === 'llm' ? 'llm-status' : section === 'telegram' ? 'tg-status' : 'th-status');
+    if (section === 'llm_dc') {
+        // Disconnect LLM
+        const r = await apiFetch('/settings/update', { method: 'POST', body: JSON.stringify({llm_api_key: '', llm_model: ''}), headers: { 'Content-Type': 'application/json' } });
+        if (r.ok) { toast('LLM disconnected'); loadLLMStatus(); }
+        return;
+    }
+    if (section === 'llm') {
+        const model = document.getElementById('llm-model').value;
+        const key = document.getElementById('llm-key').value.trim();
+        if (!model && !key) { statusEl.innerHTML = '<span class="neg text-xs">Select a model or enter API key</span>'; return; }
+        body.llm_provider = document.getElementById('llm-provider').value;
+        body.llm_base_url = document.getElementById('llm-url').value;
+        body.llm_model = model;
+        if (key) body.llm_api_key = key;
+        document.getElementById('llm-key').value = '';
+        statusEl.innerHTML = '<span class="text-slate-400 text-xs">Saving...</span>';
+    } else if (section === 'telegram') {
+        const token = document.getElementById('tg-token').value.trim();
+        const chat = document.getElementById('tg-chat').value.trim();
+        if (!token) { if (statusEl) statusEl.innerHTML = '<span class="neg text-xs">Bot token required</span>'; else toast('Bot token required'); return; }
+        body.telegram_token = token;
+        if (chat) body.telegram_chat = chat;
+        document.getElementById('tg-token').value = '';
+    } else if (section === 'thresholds') {
+        body.long_min = parseInt(document.getElementById('set-long').value);
+        body.short_max = parseInt(document.getElementById('set-short').value);
+        body.scan_interval = parseInt(document.getElementById('set-interval').value);
+    }
+    try {
+        const r = await apiFetch('/settings/update', { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } });
+        if (r.ok) {
+            const msg = section === 'llm' ? `LLM: ${body.llm_model || 'disabled'}${body.llm_api_key ? ' + key' : ''}` : section === 'telegram' ? 'Telegram bot saved' : 'Thresholds saved';
+            toast(msg);
+            if (statusEl) statusEl.innerHTML = '<span class="pos text-xs">✓ Saved</span>';
+            if (section === 'llm') loadLLMStatus();
+        } else { toast('Failed: ' + (r.error || 'unknown')); if (statusEl) statusEl.innerHTML = '<span class="neg text-xs">✗ Failed</span>'; }
+    } catch (e) { toast('Network error'); if (statusEl) statusEl.innerHTML = '<span class="neg text-xs">✗ Error</span>'; }
+}
+
+async function loadLLMStatus() {
+    try {
+        const r = await apiFetch('/settings');
+        if (r.ok && r.settings) {
+            const s = r.settings;
+            document.getElementById('set-long').value = s.long_min_score || 56;
+            document.getElementById('set-short').value = s.short_max_score || 44;
+            document.getElementById('set-interval').value = s.scan_interval || 5;
+            document.getElementById('tg-status').innerHTML = s.telegram_token_set ? '<span class="pos text-xs">Configured</span>' : '<span class="text-xs text-slate-500">Not set</span>';
+            // LLM status
+            if (s.llm_key_set) {
+                document.getElementById('llm-provider').value = s.llm_provider || 'openrouter';
+                document.getElementById('llm-url').value = s.llm_base_url || '';
+                document.getElementById('llm-status').innerHTML = '<span class="dot dot-on"></span> Active — ' + (s.llm_model || '');
+                document.getElementById('llm-info').classList.remove('hidden');
+                document.getElementById('llm-info').innerHTML = 'Connected: ' + (s.llm_provider||'openrouter') + ' | Model: ' + (s.llm_model||'auto') + ' | <a href=\"#\" onclick=\"document.getElementById(\'llm-key\').value=\'\';saveSettings(\'llm_dc\')\" class=\"text-rose-400 hover:underline\">Disconnect</a>';
+                const models = await fetchModels(s.llm_provider || 'openrouter');
+                if (s.llm_model) {
+                    const sel = document.getElementById('llm-model');
+                    const found = models.some(m => m.id === s.llm_model);
+                    if (found) sel.value = s.llm_model;
+                    else { sel.innerHTML += `<option value="${s.llm_model}" selected>${s.llm_model} (current)</option>`; }
+                }
+            } else {
+                document.getElementById('llm-status').innerHTML = '<span class="dot dot-off"></span> Offline';
+                document.getElementById('llm-info').classList.add('hidden');
+                fetchModels(document.getElementById('llm-provider').value);
+            }
+        }
+    } catch (e) { }
+}
+
+// ── Agent Tab ───────────────────────────────────────────────
+async function loadAgentData() {
+    try {
+        const [lessonsRes, decisionsRes] = await Promise.all([
+            apiFetch('/lessons'), apiFetch('/decisions')
+        ]);
+        const ll = document.getElementById('lessons-list');
+        if (lessonsRes.ok && lessonsRes.lessons && lessonsRes.lessons.length) {
+            ll.innerHTML = lessonsRes.lessons.slice(-8).reverse().map(l => {
+                const color = l.result === 'WIN' ? 'text-emerald-400' : l.result === 'LOSS' ? 'text-rose-400' : 'text-slate-400';
+                const date = (l.timestamp || '').slice(0, 16).replace('T', ' ');
+                return `<div class="glass rounded-xl p-3 text-xs"><span class="${color} font-bold">${l.result || '?'}</span> <span class="text-white">${(l.lesson || '').slice(0, 150)}</span><div class="text-slate-600 mt-1">${l.symbol || ''} ${l.regime || ''}+${l.signal || ''} · ${date}</div></div>`;
+            }).join('');
+        } else ll.innerHTML = '<div class="text-xs text-slate-500 py-4 text-center">No lessons yet. Start trading to generate insights.</div>';
+
+        const dl = document.getElementById('decisions-list');
+        if (decisionsRes.ok && decisionsRes.data && decisionsRes.data.length) {
+            dl.innerHTML = decisionsRes.data.slice(-8).reverse().map(d => `<div class="glass rounded-xl p-3 text-xs"><span class="text-white font-bold">${d.symbol}</span> <span class="${d.decision==='LONG'?'text-emerald-400':d.decision==='SHORT'?'text-rose-400':'text-slate-400'}">${d.decision}</span> conf=${d.confidence} · ${d.regime}<div class="text-slate-500 mt-1">${(d.reasons || []).slice(0, 2).join(' · ')}</div></div>`).join('');
+        } else dl.innerHTML = '<div class="text-xs text-slate-500 py-4 text-center">No decisions yet. Run a scan to generate.</div>';
+    } catch (e) { /* silent */ }
+}
+function toggleAgent() { toast('Agent setting updated'); }
+
+// ── HiveMind Tab ────────────────────────────────────────────
+async function loadHiveMindData() {
+    document.getElementById('hm-agent').value = 'agt_' + Math.random().toString(16).slice(2, 18);
+}
+async function saveHiveMind() {
+    const url = document.getElementById('hm-url').value.trim();
+    if (!url) { toast('Enter server URL'); return; }
+    const status = document.getElementById('hm-status');
+    status.innerHTML = '<span class="dot dot-on pulse"></span>Connecting...';
+    try {
+        const r = await fetch(url + '/api/hivemind/thresholds');
+        if (r.ok) { status.innerHTML = '<span class="dot dot-on"></span>Connected to swarm'; toast('Swarm connected'); }
+        else { status.innerHTML = '<span class="dot dot-off"></span>Failed to connect'; }
+    } catch (e) { status.innerHTML = '<span class="dot dot-off"></span>Connection failed'; }
+}
+async function pullHiveMind() {
+    toast('Pulling crowd lessons...');
+    const r = await apiFetch('/hivemind/lessons/pull?limit=10');
+    if (r.ok) toast(`Pulled ${(r.lessons||[]).length} crowd lessons`);
+    else toast('Pull failed');
+}
+
+async function testLLM() {
+    const statusEl = document.getElementById('llm-status');
+    statusEl.innerHTML = '<span class="text-slate-400 text-xs">Testing...</span>';
+    const body = {
+        model: document.getElementById('llm-model').value,
+        api_key: document.getElementById('llm-key').value.trim(),
+        base_url: document.getElementById('llm-url').value,
+    };
+    if (!body.api_key) { statusEl.innerHTML = '<span class="neg text-xs">Enter API key first</span>'; return; }
+    try {
+        const r = await apiFetch('/llm/test', { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } });
+        if (r.ok) {
+            statusEl.innerHTML = '<span class="pos text-xs">Connected: ' + r.message + '</span>';
+            toast('LLM connection OK');
+        } else {
+            statusEl.innerHTML = '<span class="neg text-xs">Failed: ' + (r.error||'unknown') + '</span>';
+        }
+    } catch(e) { statusEl.innerHTML = '<span class="neg text-xs">Network error</span>'; }
+}
+
+// ── Init ────────────────────────────────────────────────────
+if (typeof lucide !== 'undefined') lucide.createIcons();
+else window.addEventListener('load', () => { if (typeof lucide !== 'undefined') lucide.createIcons(); });
+loadStatus();
+loadLLMStatus();
+</script>
+</body>
+</html>

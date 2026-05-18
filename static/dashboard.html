@@ -1,0 +1,1967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Crypto HFT Screener — real-time signals, microstructure, and market correlation dashboard.">
+    <title>Crypto Screener Future Market</title>
+    <!-- Preconnect to external CDNs to reduce DNS/TLS latency -->
+    <link rel="preconnect" href="https://cdn.tailwindcss.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+    <!-- Tailwind CDN (intentional for local dev) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts with font-display swap to avoid render block -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"></noscript>
+    <!-- Lucide pinned version, defer = non-blocking -->
+    <script src="https://unpkg.com/lucide@1.14.0/dist/umd/lucide.min.js" defer></script>
+    <style>
+        * { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif; }
+        body { background-color: #040608; color: #64748b; }
+        .glass {
+            background: rgba(255, 255, 255, 0.02);
+            backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        /* Low Contrast to High Contrast on Hover */
+        .copyable-price {
+            color: #334155;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            user-select: none;
+        }
+        .copyable-price:hover {
+            color: #f8fafc;
+        }
+        .tp-price { color: #065f46; }
+        .tp-price:hover { color: #00ff88; text-shadow: 0 0 10px rgba(0,255,136,0.4); }
+        .sl-price { color: #7f1d1d; }
+        .sl-price:hover { color: #ff4d4d; text-shadow: 0 0 10px rgba(255,77,77,0.4); }
+        .price-chg-up { color: #10b981; }
+        .price-chg-down { color: #f43f5e; }
+        
+        .header-container { text-align: center; padding: 60px 0 40px 0; }
+        .header-title { font-size: 3rem; font-weight: 900; color: #fff; letter-spacing: -2px; line-height: 1; }
+        .header-subtitle { font-size: 1rem; color: #475569; margin-top: 12px; font-weight: 400; }
+        
+        .tab-active { color: #fff; border-bottom: 2px solid #fff; }
+        .tab-inactive { color: #334155; }
+        .win-positive { color: #10b981; }
+        .win-negative { color: #f43f5e; }
+
+        /* Toast — fixed bottom center */
+        #copy-toast {
+            position: fixed;
+            bottom: 32px;
+            left: 50%;
+            transform: translateX(-50%) translateY(12px);
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: #f8fafc;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            padding: 10px 24px;
+            border-radius: 100px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease, transform 0.25s ease;
+            z-index: 9999;
+            white-space: nowrap;
+        }
+        #copy-toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* Liquid Glass Dock Styles */
+        .dock-container {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(32px) saturate(180%);
+            -webkit-backdrop-filter: blur(32px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 28px;
+            box-shadow: 
+                0 10px 30px rgba(0,0,0,0.5),
+                inset 0 0 20px rgba(255,255,255,0.02);
+            animation: float 5s ease-in-out infinite;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            will-change: transform;
+        }
+        .dock-container:hover {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 12px;
+            gap: 16px;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateX(-50%) translateY(0); }
+            50% { transform: translateX(-50%) translateY(-8px); }
+        }
+        .dock-item {
+            position: relative;
+            width: 48px;
+            height: 48px;
+            border-radius: 20px;
+            color: #94a3b8;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+        }
+        .dock-item:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.1);
+            transform: scale(1.2) translateY(-10px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+        .dock-item.active {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.15);
+            box-shadow: 
+                0 0 15px rgba(255,255,255,0.1),
+                inset 0 0 10px rgba(255,255,255,0.05);
+        }
+        .dock-item .label {
+            position: absolute;
+            bottom: 120%;
+            left: 50%;
+            transform: translateX(-50%) translateY(10px);
+            padding: 8px 14px;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            border-radius: 12px;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            white-space: nowrap;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+        .dock-item:hover .label {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .bg-blob-1 {
+            position: fixed;
+            top: -10%;
+            right: -10%;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(56, 189, 248, 0.05) 0%, transparent 70%);
+            /* Reduced from blur(100px) — heavy GPU cost, use transform instead */
+            filter: blur(60px);
+            z-index: 0;
+            pointer-events: none;
+            border-radius: 50%;
+            will-change: auto;
+            transform: translateZ(0);
+        }
+        .bg-blob-2 {
+            position: fixed;
+            bottom: -10%;
+            left: -10%;
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, rgba(139, 92, 246, 0.03) 0%, transparent 70%);
+            /* Reduced from blur(120px) — heavy GPU cost */
+            filter: blur(80px);
+            z-index: 0;
+            pointer-events: none;
+            border-radius: 50%;
+            will-change: auto;
+            transform: translateZ(0);
+        }
+        select option { background: #0f172a; color: #e2e8f0; }
+
+        /* Coin Icon Styles */
+        .coin-icon { width: 26px; height: 26px; border-radius: 50%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.06); object-fit: contain; padding: 3px; flex-shrink: 0; position: absolute; top: 0; left: 0; }
+        .coin-icon-fb { width: 26px; height: 26px; border-radius: 50%; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.04); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: #475569; flex-shrink: 0; }
+        .win-dot { width: 22px; height: 22px; border-radius: 50%; background: rgba(16,185,129,0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .loss-dot { width: 22px; height: 22px; border-radius: 50%; background: rgba(239,68,68,0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .win-dot svg { color: #10b981; width: 12px; height: 12px; }
+        .loss-dot svg { color: #ef4444; width: 12px; height: 12px; }
+
+        /* Elegant Scrollbar */
+        .custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.12); }
+        .custom-scroll { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.06) transparent; }
+    </style>
+</head>
+<body class="text-slate-400 min-h-screen relative overflow-x-hidden">
+    <div class="bg-blob-1"></div>
+    <div class="bg-blob-2"></div>
+    <div id="copy-toast" class="copy-toast"></div>
+
+    <div class="relative z-10 p-4 md:p-8 max-w-6xl mx-auto">
+        <!-- Elegant Centered Header -->
+        <header class="header-container relative z-10">
+            <h1 class="header-title">Screener Market</h1>
+            <p class="header-subtitle">Screening coins to maximize your profit</p>
+        </header>
+
+        <!-- Top Controls (Aligned & Simplified) -->
+        <div class="flex flex-wrap items-center justify-center gap-4 mb-8 relative z-10">
+            <!-- Market Context -->
+            <div class="glass px-6 py-4 rounded-3xl min-w-[170px] text-center bg-slate-500/20 transition-all duration-500" id="market-context-box">
+                <span class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">Market Bias</span>
+                <div class="text-white font-bold text-sm" id="market-bias-text">Loading...</div>
+                <div class="flex items-center justify-center gap-3 mt-1">
+                    <span class="text-[10px] text-slate-500">BTC.D <span id="btc-dom-val" class="text-white">-</span>%</span>
+                    <span class="text-[10px] text-slate-500">24h <span id="btc-dom-chg" class="">-</span></span>
+                </div>
+            </div>
+
+            <div class="glass px-6 py-4 rounded-3xl min-w-[180px] text-center">
+                <span class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">Current Session</span>
+                <div class="text-white font-bold" id="current-session">-</div>
+            </div>
+            <div class="glass px-6 py-4 rounded-3xl min-w-[150px] text-center">
+                <span class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">Last Scan</span>
+                <div class="text-white font-bold" id="last-scan">-</div>
+            </div>
+            <div class="glass px-6 py-4 rounded-3xl min-w-[150px] text-center">
+                <span class="text-[10px] text-slate-600 uppercase font-bold tracking-widest block mb-1">Next Scan</span>
+                <div class="text-white font-bold" id="next-scan">-</div>
+            </div>
+            <button id="refresh-btn" class="glass w-14 h-14 rounded-3xl flex items-center justify-center hover:bg-white/5 transition-all active:scale-90" title="Refresh Data">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+            </button>
+            <button id="settings-btn" class="glass px-6 h-14 rounded-3xl flex items-center justify-center hover:bg-white/5 transition-all active:scale-90 text-[13px] font-bold text-white uppercase tracking-widest">
+                Settings
+            </button>
+            <select id="timezone-select" class="glass px-6 h-14 rounded-3xl text-xs font-bold text-white uppercase tracking-wider cursor-pointer" onchange="setTimezone(this.value)" style="background:transparent;min-width:160px;">
+                <option value="UTC-12" data-offset="-12">UTC-12</option>
+                <option value="UTC-8" data-offset="-8">UTC-8 (Pacific)</option>
+                <option value="UTC-5" data-offset="-5">UTC-5 (Eastern)</option>
+                <option value="UTC+0" data-offset="0">UTC+0 (London)</option>
+                <option value="UTC+1" data-offset="1">UTC+1 (Berlin)</option>
+                <option value="UTC+3" data-offset="3">UTC+3 (Dubai)</option>
+                <option value="UTC+5:30" data-offset="5.5">UTC+5:30 (Mumbai)</option>
+                <option value="UTC+7" data-offset="7" selected>UTC+7 (Jakarta)</option>
+                <option value="UTC+8" data-offset="8">UTC+8 (Singapore)</option>
+                <option value="UTC+9" data-offset="9">UTC+9 (Tokyo)</option>
+            </select>
+        </div>
+
+        <!-- Two Main Stats Boxes -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 relative z-10">
+            <!-- Box 1: Daily WR with Graphic -->
+            <div class="glass p-6 rounded-[32px] relative overflow-hidden group flex flex-col justify-center">
+                <div class="relative z-10">
+                    <div class="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600 mb-6">Daily WR</div>
+                    <div class="flex items-end gap-6">
+                        <div class="text-6xl font-black text-white" id="overall-wr">-%</div>
+                        <div class="flex-1 h-12 flex items-end gap-1.5 pb-1" id="wr-graphic">
+                            <div class="w-1.5 bg-emerald-500/20 rounded-t transition-all duration-700" style="height: 10%"></div>
+                            <div class="w-1.5 bg-emerald-500/40 rounded-t transition-all duration-700" style="height: 20%"></div>
+                            <div class="w-1.5 bg-emerald-500/60 rounded-t transition-all duration-700" style="height: 30%"></div>
+                            <div class="w-1.5 bg-emerald-500/80 rounded-t transition-all duration-700" style="height: 40%"></div>
+                            <div class="w-1.5 bg-emerald-500/100 rounded-t transition-all duration-700" style="height: 50%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Box 2: Active Signals -->
+            <div class="glass p-6 rounded-[32px] relative overflow-hidden group flex flex-col justify-center">
+                <div class="relative z-10">
+                    <div class="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600 mb-6">Active Signals</div>
+                    <div class="flex items-center gap-4">
+                        <div class="text-6xl font-black text-white" id="active-signals">-</div>
+                        <div class="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-bold tracking-widest border border-emerald-500/20">LIVE</div>
+                    </div>
+                </div>
+            </div>
+        </div>        <!-- Floating Dock Navigation -->
+        <nav class="dock-container">
+            <div class="dock-item active" data-tab="overview">
+                <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+                <span class="label">Overview</span>
+            </div>
+            <div class="dock-item" data-tab="history">
+                <i data-lucide="history" class="w-5 h-5"></i>
+                <span class="label">Signal History</span>
+            </div>
+            <div class="dock-item" data-tab="microstructure">
+                <i data-lucide="microscope" class="w-5 h-5"></i>
+                <span class="label">Microstructure</span>
+            </div>
+            <div class="dock-item" data-tab="correlation">
+                <i data-lucide="bar-chart-3" class="w-5 h-5"></i>
+                <span class="label">Correlation</span>
+            </div>
+            <div class="dock-item" data-tab="volatile">
+                <i data-lucide="zap" class="w-5 h-5"></i>
+                <span class="label">Volatile</span>
+            </div>
+            <a href="/data" class="dock-item" style="text-decoration:none;">
+                <i data-lucide="database" class="w-5 h-5"></i>
+                <span class="label">Data</span>
+            </a>
+            <a href="/account" class="dock-item" style="text-decoration:none;">
+                <i data-lucide="key" class="w-5 h-5"></i>
+                <span class="label">Account</span>
+            </a>
+            <a href="/trade" class="dock-item" style="text-decoration:none;">
+                <i data-lucide="play-circle" class="w-5 h-5"></i>
+                <span class="label">Trade</span>
+            </a>
+            <a href="/hivemind" class="dock-item" style="text-decoration:none;">
+                <i data-lucide="globe" class="w-5 h-5"></i>
+                <span class="label">HiveMind</span>
+            </a>
+        </nav>
+
+        <!-- Overview Tab -->
+        <div id="tab-overview" class="tab-content">
+            <section class="glass rounded-[2rem] p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold text-white">Signals Overview</h3>
+                    <div id="signals-pagination" class="flex items-center gap-2"></div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm text-slate-500" id="signals-count">0 active</span>
+                        <button onclick="triggerScan()" class="glass px-3 py-1.5 rounded-xl text-xs font-bold text-amber-400 hover:text-white hover:bg-amber-500/10 transition-all flex items-center gap-1">
+                            <span class="text-sm">▶</span> Run Scan
+                        </button>
+                        <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-emerald-500"></div><span class="text-xs text-slate-400">Active</span></div>
+                        <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-amber-500"></div><span class="text-xs text-slate-400">Blocked</span></div>
+                    </div>
+                </div>
+                <div class="overflow-x-auto overflow-y-auto custom-scroll" style="max-height: 520px;">
+                    <table class="w-full">
+                        <thead class="sticky top-0 bg-[#040608]/95 backdrop-blur z-10">
+                            <tr class="text-[11px] font-black text-slate-600 uppercase tracking-[0.15em] border-b border-white/10">
+                                <th class="text-left py-4 px-4">Coin</th>
+                                <th class="text-left py-4 px-4">Signal</th>
+                                <th class="text-left py-4 px-4">Price</th>
+                                <th class="text-right py-4 px-4">24h Chg</th>
+                                <th class="text-left py-4 px-4">Confidence</th>
+                                <th class="text-left py-4 px-4">Regime</th>
+                                <th class="text-left py-4 px-4 text-xs font-semibold text-amber-400 uppercase tracking-wider">TP / SL Targets</th>
+                                <th class="text-left py-4 px-4">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="signals-tbody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <!-- History Tab -->
+        <div id="tab-history" class="tab-content hidden">
+            <!-- Calendar -->
+            <section class="glass rounded-[2rem] p-6 mb-8">
+                <div class="flex justify-between items-center mb-8">
+                    <div class="flex items-center gap-5">
+                        <h3 class="text-xl font-bold text-white">Winrate Calendar</h3>
+                        <div class="relative">
+                            <button id="cal-nav-btn" class="glass flex items-center bg-white/5 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer hover:bg-white/10 transition-all border border-white/5">
+                                <span class="text-white mr-3" id="calendar-month">-</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500"><path d="m6 9 6 6 6-6"/></svg>
+                            </button>
+                            <div id="cal-dropdown" class="absolute top-full left-0 mt-2 glass rounded-xl p-4 z-50 hidden" style="min-width:200px;">
+                                <div class="flex items-center justify-between mb-3">
+                                    <button id="cal-prev" class="p-1 rounded hover:bg-white/10"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+                                    <span id="cal-year-label" class="text-white font-bold text-sm"></span>
+                                    <button id="cal-next" class="p-1 rounded hover:bg-white/10"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></button>
+                                </div>
+                                <div id="cal-months" class="grid grid-cols-3 gap-1"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-7 gap-4 text-center text-[11px] font-black text-slate-600 uppercase tracking-[0.2em] mb-4">
+                    <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+                </div>
+                <div id="calendar-grid" class="grid grid-cols-7 gap-4"></div>
+            </section>
+
+            <!-- Daily Stats -->
+            <section id="daily-stats-section" class="glass rounded-[2.5rem] p-10 mb-8">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold text-white" id="daily-stats-title">Daily Performance (7D)</h3>
+                    <!-- Time Range -->
+                    <div class="flex gap-2">
+                        <button class="time-filter px-4 py-2 text-xs font-bold rounded-xl transition-all duration-300 bg-white/10 text-white shadow-lg" data-range="7">7D</button>
+                        <button class="time-filter px-4 py-2 text-xs font-bold rounded-xl transition-all duration-300 hover:bg-white/5 hover:text-white text-slate-400" data-range="30">1M</button>
+                        <button class="time-filter px-4 py-2 text-xs font-bold rounded-xl transition-all duration-300 hover:bg-white/5 hover:text-white text-slate-400" data-range="90">3M</button>
+                        <button class="time-filter px-4 py-2 text-xs font-bold rounded-xl transition-all duration-300 hover:bg-white/5 hover:text-white text-slate-400" data-range="all">ALL</button>
+                    </div>
+                </div>
+                <div id="daily-stats-grid" class="space-y-2"></div>
+            </section>
+
+            <!-- Closed Trades -->
+            <section class="glass rounded-[2rem] p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold text-white">Closed Trades</h3>
+                    <div id="history-pagination" class="flex items-center gap-2"></div>
+                    <div class="flex gap-2">
+                        <button class="filter-btn glass px-4 py-2 rounded-xl text-xs font-bold active" data-filter="all">All</button>
+                        <button class="filter-btn glass px-4 py-2 rounded-xl text-xs font-bold text-slate-400" data-filter="win">Wins</button>
+                        <button class="filter-btn glass px-4 py-2 rounded-xl text-xs font-bold text-slate-400" data-filter="loss">Losses</button>
+                    </div>
+                </div>
+                <div id="history-container" class="space-y-3">
+                    <div class="text-center text-slate-500 py-8">Loading...</div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Microstructure Tab -->
+        <div id="tab-microstructure" class="tab-content hidden">
+            <!-- Sentiment Overview -->
+            <section class="glass rounded-[2.5rem] p-8 mb-6">
+                <div class="flex items-center justify-between mb-6">
+                    <div>
+                        <h3 class="text-lg font-bold text-white mb-2">Market Sentiment Overview</h3>
+                        <p class="text-xs text-slate-400">Composite sentiment from L/S ratio, funding, whale positioning, and CVD.</p>
+                    </div>
+                    <span class="text-xs text-slate-500" id="sentiment-updated">-</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6" id="sentiment-cards">
+                    <div class="bg-white/10 rounded-xl p-4 text-center">
+                        <div class="text-[10px] text-slate-500 uppercase font-bold tracking-wider block mb-1">Sentiment Score</div>
+                        <div class="text-3xl font-black text-white" id="sentiment-score">-</div>
+                    </div>
+                    <div class="bg-white/10 rounded-xl p-4 text-center">
+                        <div class="text-[10px] text-slate-500 uppercase font-bold tracking-wider block mb-1">CVD Status</div>
+                        <div class="text-3xl font-black text-white" id="cvd-status">-</div>
+                    </div>
+                    <div class="bg-white/10 rounded-xl p-4 text-center">
+                        <div class="text-[10px] text-slate-500 uppercase font-bold tracking-wider block mb-1">L/S Ratio</div>
+                        <div class="text-3xl font-black text-white" id="ls-ratio">-</div>
+                    </div>
+                    <div class="bg-white/10 rounded-xl p-4 text-center">
+                        <div class="text-[10px] text-slate-500 uppercase font-bold tracking-wider block mb-1">Top Trader</div>
+                        <div class="text-3xl font-black text-white" id="top-trader-ratio">-</div>
+                    </div>
+                </div>
+                <div id="composite-signals" class="flex flex-wrap gap-2">
+                    <!-- Composite signals will be inserted here -->
+                </div>
+            </section>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <section class="glass rounded-[2.5rem] p-8">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-lg font-bold text-white">Fear & Greed Index</h3>
+                        <span class="text-xs text-slate-500" id="fg-updated">-</span>
+                    </div>
+                    <div class="flex flex-col items-center gap-4">
+                        <div class="relative w-48 h-24">
+                            <div class="absolute bottom-0 left-0 w-full h-6 rounded-full bg-gradient-to-r from-red-600 via-amber-400 to-green-500 opacity-30"></div>
+                            <div id="fg-indicator" class="absolute bottom-0 w-3 h-8 bg-white rounded-full shadow-lg transition-all duration-700" style="left:50%"></div>
+                        </div>
+                        <div class="text-4xl font-black text-white" id="fg-value">50</div>
+                        <div class="text-sm font-bold" id="fg-label">Neutral</div>
+                        <div class="flex justify-between w-full text-[9px] text-slate-600 font-bold px-2">
+                            <span>Extreme Fear</span><span>Fear</span><span>Neutral</span><span>Greed</span><span>Extreme Greed</span>
+                        </div>
+                    </div>
+                </section>
+                <section class="glass rounded-[2.5rem] p-8">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-lg font-bold text-white">Whale Activity</h3>
+                        <span class="text-xs text-slate-500">Position Ratio</span>
+                    </div>
+                    <div id="whale-container" class="space-y-3 max-h-[380px] overflow-y-auto custom-scroll pr-1">
+                        <div class="text-center text-slate-500 py-8">Loading...</div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- Correlation Tab -->
+        <div id="tab-correlation" class="tab-content hidden">
+            <div class="glass rounded-[2.5rem] p-10">
+                <div class="flex items-center justify-between mb-8">
+                    <div>
+                        <h3 class="text-xl font-bold text-white mb-2">Market Sentiment & Correlation</h3>
+                        <p class="text-xs text-slate-400">Hierarchical bias confirmation based on Global Market Cap.</p>
+                    </div>
+                    <button onclick="loadSentimentData()" class="glass px-4 py-2 rounded-xl text-xs font-bold hover:bg-white/5 transition-colors">
+                        Refresh Data
+                    </button>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <!-- Layer 1 -->
+                    <div class="glass p-6 rounded-3xl bg-amber-500/20">
+                        <span class="text-[10px] text-slate-500 uppercase font-bold tracking-widest block mb-1">Layer 1: BTC Price</span>
+                        <div class="text-3xl font-black text-white mb-2" id="corr-btc-price">-</div>
+                    </div>
+                    <!-- Layer 2 -->
+                    <div class="glass p-6 rounded-3xl bg-rose-500/20">
+                        <span class="text-[10px] text-slate-500 uppercase font-bold tracking-widest block mb-1">Layer 2: USDT.D</span>
+                        <div class="text-3xl font-black text-white mb-2" id="corr-usdt-dom">-</div>
+                    </div>
+                    <!-- Layer 3 -->
+                    <div class="glass p-6 rounded-3xl bg-sky-500/20">
+                        <span class="text-[10px] text-slate-500 uppercase font-bold tracking-widest block mb-1">Layer 3: BTC.D</span>
+                        <div class="text-3xl font-black text-white mb-2" id="corr-btc-dom">-</div>
+                    </div>
+                    <!-- Layer 4/5 -->
+                    <div class="glass p-6 rounded-3xl bg-emerald-500/20">
+                        <span class="text-[10px] text-slate-500 uppercase font-bold tracking-widest block mb-1">TOTAL 3 (Alts Cap)</span>
+                        <div class="text-3xl font-black text-white mb-2" id="corr-total3">-</div>
+                    </div>
+                </div>
+
+                <!-- Analysis Box -->
+                <div class="glass p-8 rounded-[2rem] bg-white/[0.02]">
+                    <h4 class="text-sm font-bold text-slate-300 uppercase tracking-widest mb-4">Correlation Conclusion</h4>
+                    <p class="text-lg text-white font-medium" id="corr-conclusion">Analyzing market structure...</p>
+                    <p class="text-sm text-slate-400 mt-3" id="corr-action">Waiting for data.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Volatile Scanner Tab -->
+        <div id="tab-volatile" class="tab-content hidden">
+            <section class="glass rounded-[2rem] p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h3 class="text-xl font-bold text-white mb-1">Volatile & Short Scanner</h3>
+                        <p class="text-xs text-slate-500">Coins with high volatility or short potential. Filtered from latest scan.</p>
+                    </div>
+                    <button onclick="pollManager.reset();forceRefresh();showToast('Refreshing signals...')" class="glass px-4 py-2 rounded-xl text-xs font-bold hover:bg-white/5 transition-colors">
+                        Refresh
+                    </button>
+                </div>
+                <div class="max-h-[500px] overflow-y-auto custom-scroll">
+                    <table class="w-full">
+                        <thead class="sticky top-0 bg-[#040608]/95 backdrop-blur z-10">
+                            <tr class="text-[10px] font-black text-slate-600 uppercase tracking-[0.12em] border-b border-white/10">
+                                <th class="text-left py-3 px-3">Coin</th>
+                                <th class="text-left py-3 px-3">Signal</th>
+                                <th class="text-right py-3 px-3">ATR%</th>
+                                <th class="text-right py-3 px-3">VolZ</th>
+                                <th class="text-right py-3 px-3">V-Score</th>
+                                <th class="text-right py-3 px-3">S-Score</th>
+                                <th class="text-left py-3 px-3 text-xs font-semibold text-amber-400 tracking-wider">TP / SL</th>
+                            </tr>
+                        </thead>
+                        <tbody id="volatile-tbody">
+                            <tr><td colspan="7" class="py-12 text-center text-slate-500">Loading signals...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Modals Layer -->
+    <div id="modal-backdrop" class="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] hidden flex items-center justify-center p-6">
+        
+        <!-- Settings Modal -->
+        <div id="settings-modal" class="glass max-w-sm w-full rounded-[2.5rem] p-10 hidden relative overflow-hidden">
+            <div class="flex justify-between items-center mb-8">
+                <h3 class="text-xl font-black text-white uppercase tracking-widest">System Actions</h3>
+                <button onclick="closeModals()" class="text-slate-500 hover:text-white transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            
+            <div class="space-y-4">
+                <button onclick="triggerSystemAction('/api/refresh', 'Scan triggered!')" class="w-full py-5 bg-white/[0.05] hover:bg-white/[0.1] text-white font-bold rounded-2xl transition-all active:scale-95 border border-white/5 flex items-center justify-between px-6 group">
+                    <span>Force Refresh</span>
+                    <span class="text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity">↗</span>
+                </button>
+            </div>
+            
+            <p class="text-[10px] text-slate-600 mt-8 text-center uppercase tracking-widest font-bold">Use with caution</p>
+        </div>
+        
+        <!-- Deep Scan Modal -->
+        <div id="deep-scan-modal" class="glass max-w-lg w-full rounded-[2.5rem] p-10 hidden relative overflow-hidden">
+            <div class="flex justify-between items-center mb-8">
+                <div>
+                    <h3 class="text-2xl font-black text-white" id="ds-title">Deep Scan</h3>
+                    <p class="text-xs text-slate-500" id="ds-subtitle">Analyzing microstructure...</p>
+                </div>
+                <button onclick="closeModals()" class="text-slate-500 hover:text-white transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            
+            <div id="ds-content" class="space-y-6">
+                <!-- Content will be injected -->
+                <div class="flex flex-col items-center justify-center py-12">
+                    <div class="w-12 h-12 border-4 border-sky-500/20 border-t-sky-500 rounded-full animate-spin mb-4"></div>
+                    <p class="text-sm font-bold text-slate-500 uppercase tracking-widest">Scanning Liquidity...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // LOCALSTORAGE PERSISTENCE
+        // ============================================
+        function lsGet(key, ttlMs) {
+            try {
+                const raw = localStorage.getItem(key);
+                if (!raw) return null;
+                const obj = JSON.parse(raw);
+                if (ttlMs && obj._ts && Date.now() - obj._ts > ttlMs) return null;
+                return obj._data;
+            } catch (e) { return null; }
+        }
+        function lsSet(key, data) {
+            try { localStorage.setItem(key, JSON.stringify({ _data: data, _ts: Date.now() })); } catch (e) { /* quota exceeded, ignore */ }
+        }
+
+        // ============================================
+        // STATE (with localStorage restore)
+        // ============================================
+        const state = {
+            activeTab: 'overview',
+            timeRange: 7,
+            scanData: lsGet('cs_scan', 5 * 60 * 1000) || null,
+            dbStats: lsGet('cs_stats', 5 * 60 * 1000) || null,
+            closedHistory: lsGet('cs_history', 10 * 60 * 1000) || null,
+            dailyStats: lsGet('cs_daily', 10 * 60 * 1000) || null,
+            calendarYear: new Date().getFullYear(),
+            calendarMonth: new Date().getMonth() + 1,
+            selectedDate: null,
+            currentFilter: 'all',
+            timezone: localStorage.getItem('screener_timezone') || 'UTC+7',
+            timezoneOffset: parseFloat(localStorage.getItem('screener_offset')) || 7,
+            signalsPage: 1,
+            historyPage: 1,
+            itemsPerPage: 5,
+            _cache: {
+                scanHash: null, statsHash: null, lastFetch: 0,
+                historyAt: 0, sentimentAt: 0, microAt: 0
+            },
+            _loaded: { microstructure: false }
+        };
+
+        // Timezone definitions
+        const timezones = [
+            { name: 'Jakarta', offset: 7, label: 'GMT+7 (Jakarta)' },
+            { name: 'Singapore', offset: 8, label: 'GMT+8 (Singapore)' },
+            { name: 'Hong Kong', offset: 8, label: 'GMT+8 (Hong Kong)' },
+            { name: 'Tokyo', offset: 9, label: 'GMT+9 (Tokyo)' },
+            { name: 'Sydney', offset: 11, label: 'GMT+11 (Sydney)' },
+            { name: 'Dubai', offset: 4, label: 'GMT+4 (Dubai)' },
+            { name: 'Mumbai', offset: 5.5, label: 'GMT+5:30 (Mumbai)' },
+            { name: 'Berlin', offset: 1, label: 'GMT+1 (Berlin)' },
+            { name: 'Paris', offset: 1, label: 'GMT+1 (Paris)' },
+            { name: 'London', offset: 0, label: 'GMT+0 (London)' },
+            { name: 'UTC', offset: 0, label: 'UTC' },
+            { name: 'US Eastern', offset: -5, label: 'GMT-5 (New York)' },
+            { name: 'US Pacific', offset: -8, label: 'GMT-8 (Los Angeles)' },
+        ];
+
+        const activeRequests = new Map();
+
+        // ── Coin Icon Helper ──
+        function coinIconHTML(symbol) {
+            const coin = symbol.replace('USDT','').replace('1000','');
+            const map = { BTC:'btc',ETH:'eth',BNB:'bnb',SOL:'sol',XRP:'xrp',DOGE:'doge',ADA:'ada',AVAX:'avax',LINK:'link',DOT:'dot',ATOM:'atom',NEAR:'near',FIL:'fil',UNI:'uni',AAVE:'aave',ARB:'arbitrum',OP:'optimism',INJ:'injective',FET:'fetch-ai',RENDER:'render',PEPE:'pepe',WIF:'dogwifhat',FLOKI:'floki',SUI:'sui',SEI:'sei',APT:'aptos',TIA:'celestia',ONDO:'ondo',STX:'stacks',ORDI:'ordi' };
+            const id = map[coin] || coin.toLowerCase();
+            const fallback = coin.slice(0,2).toUpperCase();
+            return `<div class="relative" style="width:26px;height:26px;flex-shrink:0">
+                <img src="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/svg/color/${id}.svg" class="coin-icon" onerror="this.style.display='none'" alt="">
+                <div class="coin-icon-fb">${fallback}</div>
+            </div>`;
+        }
+
+        // ============================================
+        // HELPERS
+        // ============================================
+        async function api(endpoint, options = {}, timeout = 25000) {
+            if (activeRequests.has(endpoint)) { activeRequests.get(endpoint).abort(); activeRequests.delete(endpoint); }
+            const controller = new AbortController();
+            activeRequests.set(endpoint, controller);
+            try {
+                const tid = setTimeout(() => controller.abort(), timeout);
+                const response = await fetch(endpoint, { 
+                    signal: controller.signal,
+                    ...options
+                });
+                clearTimeout(tid);
+                activeRequests.delete(endpoint);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return await response.json();
+            } catch (e) {
+                activeRequests.delete(endpoint);
+                if (e.name === 'AbortError') return { ok: false, error: 'timeout' };
+                return { ok: false, error: 'network_error' };
+            }
+        }
+
+        function fastHash(obj) { if (!obj) return ''; const s = JSON.stringify(obj); let h = 0; for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h &= h; } return h.toString(16); }
+        const formatPercent = (v) => `${(v || 0).toFixed(1)}%`;
+        const formatNumber = (v) => (v || 0).toLocaleString();
+        const formatPrice = (p) => { if (!p || p === 0) return '-'; if (p >= 1000) return p.toFixed(2); if (p >= 1) return p.toFixed(4); return p.toFixed(6); };
+        function escapeHtml(t) { if (t === null || t === undefined) return ''; const d = document.createElement('div'); d.textContent = String(t); return d.innerHTML; }
+
+        function buildBreakdownTooltip(breakdown) {
+            if (!breakdown || breakdown.length === 0) return '';
+            let rows = '';
+            for (const b of breakdown) {
+                const isPos = b.includes('+');
+                const parts = b.split(':');
+                const label = escapeHtml(parts[0] || '');
+                const val   = escapeHtml(parts[1] || '');
+                const color = isPos ? 'text-emerald-400' : 'text-rose-400';
+                rows += '<div class="flex justify-between items-center text-xs mb-1">' +
+                            '<span class="text-slate-300">' + label + '</span>' +
+                            '<span class="' + color + ' font-mono">' + val + '</span>' +
+                        '</div>';
+            }
+            return '<div class="absolute left-full top-1/2 -translate-y-1/2 ml-2 w-48 p-3 rounded-xl bg-slate-900 border border-slate-700 shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 z-50">' +
+                       '<div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-white/10 pb-2 mb-2">Score Breakdown</div>' +
+                       rows +
+                   '</div>';
+        }
+
+        // Format time with timezone offset
+        function formatTimeWithOffset(dateStr, offsetHours) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return '-';
+            const utc = date.getTime() + (date.getTimezoneOffset() * 60000);
+            const targetTime = new Date(utc + (offsetHours * 3600000));
+            return targetTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        }
+
+        function showToast(text) {
+            const toast = document.getElementById('copy-toast');
+            if (!toast) return;
+            toast.textContent = text;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+        }
+
+        function copyToClipboard(text) {
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showToast(`Copied: ${text}`);
+                }).catch(() => {
+                    fallbackCopy(text);
+                });
+            } else {
+                fallbackCopy(text);
+            }
+        }
+        function fallbackCopy(text) {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            ta.style.top = '-9999px';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            try { document.execCommand('copy'); showToast(`Copied: ${text}`); } catch (e) { showToast('Copy failed — select manually'); }
+            document.body.removeChild(ta);
+        }
+
+        // ============================================
+        // PAGINATION
+        // ============================================
+        function renderPagination(containerId, currentPage, totalPages, onPageChange) {
+            const container = document.getElementById(containerId);
+            if (totalPages <= 1) {
+                container.innerHTML = '';
+                return;
+            }
+            let html = '';
+            html += `<button class="pagination-btn text-slate-400" ${currentPage === 1 ? 'disabled' : ''} onclick="${onPageChange}(${currentPage - 1})">Prev</button>`;
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+                    html += `<button class="pagination-btn ${i === currentPage ? 'active' : 'text-slate-400'}" onclick="${onPageChange}(${i})">${i}</button>`;
+                } else if (i === currentPage - 2 || i === currentPage + 2) {
+                    html += `<span class="text-slate-600 px-1">...</span>`;
+                }
+            }
+            html += `<button class="pagination-btn text-slate-400" ${currentPage === totalPages ? 'disabled' : ''} onclick="${onPageChange}(${currentPage + 1})">Next</button>`;
+            container.innerHTML = html;
+        }
+
+        function goToSignalsPage(page) {
+            state.signalsPage = page;
+            if (state.scanData && state.scanData.data) {
+                updateSignalsTable(state.scanData.data);
+            }
+        }
+
+        function goToHistoryPage(page) {
+            state.historyPage = page;
+            if (state.closedHistory) {
+                updateHistory(state.closedHistory);
+            }
+        }
+
+        // ============================================
+        // DATA LOADING
+        // ============================================
+        async function loadDashboard() {
+            // Render from cached data immediately if available
+            if (state.scanData && state.scanData.data) {
+                updateSummaryCards(state.scanData);
+                updateSignalsTable(state.scanData.data);
+            }
+            if (state.dbStats) updateWinRateStats(state.dbStats);
+            if (state.dailyStats) updateDailyStats(state.dailyStats);
+
+            const now = Date.now();
+            // Skip API fetch if cache is fresh (< 30s)
+            if (now - state._cache.lastFetch < 30000) return;
+            state._cache.lastFetch = now;
+
+            const [scan, dbStats, status, health] = await Promise.all([
+                api('/api/scan/latest'),
+                api('/api/db/stats'),
+                api('/api/status'),
+                api('/health')
+            ]);
+
+            if (scan.ok) {
+                const h = fastHash(scan.data);
+                if (h !== state._cache.scanHash) {
+                    state._cache.scanHash = h;
+                    state.scanData = scan;
+                    lsSet('cs_scan', scan);
+                    updateSummaryCards(scan);
+                    updateSignalsTable(scan.data);
+                }
+            } else if (!state.scanData) {
+                const errMsg = scan.error || 'Waiting for first scan...';
+                document.getElementById('signals-tbody').innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-500">
+                    <div class="text-lg mb-2">${escapeHtml(errMsg)}</div>
+                    <button onclick="forceRefresh()" class="text-amber-400 hover:underline text-sm">Trigger Scan Now</button>
+                </td></tr>`;
+            }
+
+            if (dbStats.ok && dbStats.stats) {
+                const h = fastHash(dbStats.stats);
+                if (h !== state._cache.statsHash) {
+                    state._cache.statsHash = h;
+                    state.dbStats = dbStats.stats;
+                    lsSet('cs_stats', dbStats.stats);
+                    updateWinRateStats(dbStats.stats);
+                }
+            }
+
+            if (status.ok) updateStatus(status);
+            if (health && health.ok) {
+                const ctxBox = document.getElementById('market-context-box');
+                if (ctxBox && health.ml_ready) ctxBox.style.borderColor = 'rgba(16,185,129,0.2)';
+            }
+
+            if (state.activeTab === 'history') {
+                await loadHistoryData();
+            }
+        }
+
+        async function loadHistoryData(force = false) {
+            const TTL = 3 * 60 * 1000; // 3 minutes
+            const now = Date.now();
+
+            // If cached data exists and is fresh, render instantly from cache
+            if (!force && now - state._cache.historyAt < TTL) {
+                if (state.closedHistory) updateHistory(state.closedHistory);
+                if (state.dailyStats) { updateCalendar(state.dailyStats); updateDailyStats(state.dailyStats); }
+                return;
+            }
+
+            state._cache.historyAt = now;
+            const days = state.timeRange === 'all' ? 9999 : state.timeRange;
+            const [closed, daily] = await Promise.all([
+                api(`/api/signals/history?limit=500&result=closed&days=${days}`),
+                api(`/api/daily-performance?days=${days}`)
+            ]);
+            
+            if (closed.ok && closed.data) {
+            state.closedHistory = closed.data;
+            lsSet('cs_history', closed.data);
+            // Sort by exit_timestamp desc to ensure correct order
+            state.closedHistory.sort((a, b) => {
+                const ta = a.exit_timestamp || a.timestamp || '';
+                const tb = b.exit_timestamp || b.timestamp || '';
+                return tb.localeCompare(ta);
+            });
+            updateHistory(closed.data);
+            }
+            
+            if (daily.ok && daily.data) {
+                state.dailyStats = daily.data;
+                lsSet('cs_daily', daily.data);
+                updateCalendar(daily.data);
+                updateDailyStats(daily.data);
+                
+                const validData = daily.data.filter(d => d.win_rate !== null && d.win_rate !== undefined);
+                const avgWR = validData.length > 0 
+                    ? validData.reduce((sum, d) => sum + (d.win_rate || 0), 0) / validData.length 
+                    : 0;
+                const wrElement = document.getElementById('overall-wr');
+                if (wrElement) wrElement.textContent = validData.length > 0 ? formatPercent(avgWR) : '-';
+                if (validData.length > 0) updateWRGraphic(avgWR);
+            }
+        }
+
+        async function loadSentimentData(force = false) {
+            const TTL = 5 * 60 * 1000; // 5 minutes
+            const now = Date.now();
+            if (!force && now - state._cache.sentimentAt < TTL) return; // already fresh
+            state._cache.sentimentAt = now;
+            try {
+                const res = await api('/api/market/sentiment');
+                if (res.ok && res.data) updateSentimentUI(res.data);
+            } catch (e) { /* silent fail */ }
+        }
+
+        function updateSentimentUI(data) {
+            if (!data) return;
+            
+            // Market Context Box
+            const btcDomEl = document.getElementById('btc-dom-val');
+            const btcDomChgEl = document.getElementById('btc-dom-chg');
+            const biasEl = document.getElementById('market-bias-text');
+            const ctxBox = document.getElementById('market-context-box');
+
+            if (btcDomEl) btcDomEl.textContent = (data.btc_dom || 0).toFixed(1);
+            if (btcDomChgEl) {
+                const change = (data.btc_dom_change || 0) * 100;
+                const arrow = change > 0.3 ? '↑' : change < -0.3 ? '↓' : '→';
+                const color = change > 0.3 ? 'text-rose-400' : change < -0.3 ? 'text-emerald-400' : 'text-slate-400';
+                btcDomChgEl.className = color;
+                btcDomChgEl.textContent = `${change > 0 ? '+' : ''}${change.toFixed(2)}% ${arrow}`;
+            }
+            if (biasEl && ctxBox) {
+                const dom = data.btc_dom || 50;
+                const usdtDom = data.usdt_dom || 4;
+                if (dom > 55 || usdtDom > 5) {
+                    biasEl.textContent = 'RISK-OFF ⚠️';
+                    biasEl.className = 'text-rose-400 font-bold text-sm';
+                    ctxBox.style.borderColor = 'rgba(248,113,113,0.3)';
+                } else if (dom < 48 && usdtDom < 4) {
+                    biasEl.textContent = 'RISK-ON 🚀';
+                    biasEl.className = 'text-emerald-400 font-bold text-sm';
+                    ctxBox.style.borderColor = 'rgba(16,185,129,0.3)';
+                } else {
+                    biasEl.textContent = 'NEUTRAL';
+                    biasEl.className = 'text-amber-400 font-bold text-sm';
+                    ctxBox.style.borderColor = 'rgba(251,191,36,0.2)';
+                }
+            }
+
+            // Fear & Greed meter
+            const fg = data.fear_greed_proxy || 50;
+            const fgVal = document.getElementById('fg-value');
+            const fgLabel = document.getElementById('fg-label');
+            const fgInd = document.getElementById('fg-indicator');
+            const fgUpd = document.getElementById('fg-updated');
+            if (fgVal) fgVal.textContent = fg;
+            if (fgLabel) {
+                if (fg <= 25) fgLabel.textContent = 'Extreme Fear 😱';
+                else if (fg <= 40) fgLabel.textContent = 'Fear 😟';
+                else if (fg <= 60) fgLabel.textContent = 'Neutral 😐';
+                else if (fg <= 75) fgLabel.textContent = 'Greed 😎';
+                else fgLabel.textContent = 'Extreme Greed 🚀';
+                fgLabel.className = fg <= 25 ? 'text-sm font-bold text-red-400' :
+                    fg <= 40 ? 'text-sm font-bold text-amber-400' :
+                    fg <= 60 ? 'text-sm font-bold text-slate-300' :
+                    fg <= 75 ? 'text-sm font-bold text-emerald-400' : 'text-sm font-bold text-green-400';
+            }
+            if (fgInd) fgInd.style.left = Math.max(2, Math.min(98, fg)) + '%';
+            if (fgUpd) fgUpd.textContent = formatTimeWithOffset(new Date().toISOString(), state.timezoneOffset);
+
+            // Correlation Tab
+            const btcPriceEl = document.getElementById('corr-btc-price');
+            const usdtDomEl = document.getElementById('corr-usdt-dom');
+            const corrBtcDomEl = document.getElementById('corr-btc-dom');
+            const total3El = document.getElementById('corr-total3');
+            const conclusionEl = document.getElementById('corr-conclusion');
+            const actionEl = document.getElementById('corr-action');
+
+            if (btcPriceEl) btcPriceEl.textContent = `$${formatNumber(data.btc_price)}`;
+            if (usdtDomEl) usdtDomEl.textContent = `${data.usdt_dom}%`;
+            if (corrBtcDomEl) {
+                const change = data.btc_dom_change || 0;
+                const arrow = change > 0.3 ? ' ↑' : change < -0.3 ? ' ↓' : '';
+                const chgColor = change > 0.3 ? 'text-emerald-400' : change < -0.3 ? 'text-rose-400' : '';
+                corrBtcDomEl.innerHTML = `${data.btc_dom}%<span class="${chgColor} text-xs">${arrow}</span>`;
+            }
+            if (total3El) {
+                const t3Billion = (data.total3 / 1e9).toFixed(1);
+                total3El.textContent = `$${t3Billion}B`;
+            }
+
+            // Simple Analysis Logic
+            if (conclusionEl && actionEl) {
+                let conclusion = "Market in Neutral Balance.";
+                let action = "Wait for Layer 1 & 2 confirmation.";
+
+                if (data.usdt_dom < 4.2) {
+                    conclusion = "Risk-ON Environment Detected.";
+                    action = "Focus on HIGH confidence LONG signals.";
+                } else if (data.usdt_dom > 5.0) {
+                    conclusion = "Risk-OFF / Flight to Safety.";
+                    action = "Protective mode: SHORTS or WAIT only.";
+                }
+
+                conclusionEl.textContent = conclusion;
+                actionEl.textContent = action;
+            }
+        }
+
+        async function forceRefresh() {
+            state._cache.historyAt = 0;
+            state._cache.sentimentAt = 0;
+            state._cache.microAt = 0;
+            state._cache.lastFetch = 0;
+            state._loaded.microstructure = false;
+            const result = await api('/api/scan', { method: 'POST' });
+            if (result.ok) {
+                showToast('Scan started...');
+                setTimeout(loadDashboard, 5000);
+            }
+        }
+
+        async function triggerScan() {
+            showToast('Scanning...');
+            const result = await api('/api/scan', { method: 'POST' });
+            if (result.ok) {
+                showToast('Scan running — refreshing in 5s');
+                setTimeout(loadDashboard, 5000);
+            } else if (result.error && result.error.includes('already')) {
+                showToast('Scan already running...');
+            } else {
+                showToast('Scan failed: ' + (result.error || ''));
+            }
+        }
+
+        // ============================================
+        // UPDATE UI
+        // ============================================
+        function updateSummaryCards(scan) {
+            const summary = scan.summary || {};
+            const activeCount = (summary.long || 0) + (summary.short || 0);
+            document.getElementById('active-signals').textContent = activeCount;
+        }
+
+        function updateWRGraphic(wr) {
+            const bars = document.querySelectorAll('#wr-graphic div');
+            if (bars.length === 5) {
+                const base = Math.max(10, wr - 20); // Start low point
+                bars[0].style.height = `${Math.min(100, Math.max(10, base - 10))}%`;
+                bars[1].style.height = `${Math.min(100, Math.max(10, base))}%`;
+                bars[2].style.height = `${Math.min(100, Math.max(10, wr - 10))}%`;
+                bars[3].style.height = `${Math.min(100, Math.max(10, wr + 10))}%`; // little spike
+                bars[4].style.height = `${Math.max(10, wr)}%`; // End at actual WR
+                
+                // Change color based on success
+                const color = wr >= 50 ? 'emerald' : 'rose';
+                bars.forEach((b, i) => {
+                    const intensity = (i + 1) * 20; // 20, 40, 60, 80, 100
+                    b.className = `w-1.5 rounded-t transition-all duration-700 bg-${color}-500/${intensity}`;
+                });
+            }
+        }
+        
+        function updateWinRateStats(stats) {
+            if (!stats) return;
+            const wins = Number(stats.wins) || 0;
+            const losses = Number(stats.losses) || 0;
+            const total = wins + losses;
+            const wr = total > 0 ? (wins / total * 100) : 0;
+            
+            // Update WR graphic (for Overall WR box if needed elsewhere)
+            updateWRGraphic(wr);
+        }
+
+        function updateRegimeWR(beliefs) {
+            const el = document.getElementById('bull-wr');
+            if (!el || !beliefs) return;
+            
+            const bl = beliefs['BULL+LONG'];
+            const bs = beliefs['BULL+SHORT'];
+            if (bl && bs) {
+                const avg = (bl.wr_estimate * bl.total_trades + bs.wr_estimate * bs.total_trades) / (bl.total_trades + bs.total_trades);
+                el.textContent = formatPercent(avg);
+            } else if (bl) {
+                el.textContent = formatPercent(bl.wr_estimate);
+            }
+        }
+
+        function updateStatus(status) {
+            document.getElementById('last-scan').textContent = formatTimeWithOffset(status.last_scan, state.timezoneOffset);
+            document.getElementById('next-scan').textContent = formatTimeWithOffset(status.next_scan, state.timezoneOffset);
+
+            // Session based on UTC
+            const utcHour = new Date().getUTCHours();
+            let sn, sc, hours;
+            if (utcHour >= 13 && utcHour < 16) { 
+                sn = 'LONDON/NY'; sc = '#fbbf24'; 
+                hours = formatSessionHours(13, 16, state.timezoneOffset);
+            }
+            else if (utcHour >= 8 && utcHour < 13) { 
+                sn = 'LONDON'; sc = '#10b981'; 
+                hours = formatSessionHours(8, 16, state.timezoneOffset);
+            }
+            else if (utcHour >= 16 && utcHour < 22) { 
+                sn = 'NEW YORK'; sc = '#3b82f6'; 
+                hours = formatSessionHours(16, 22, state.timezoneOffset);
+            }
+            else if (utcHour >= 0 && utcHour < 8) { 
+                sn = 'ASIA'; sc = '#8b5cf6'; 
+                hours = formatSessionHours(0, 8, state.timezoneOffset);
+            }
+            else { 
+                sn = 'OFF-HOURS'; sc = '#64748b'; 
+                hours = 'Variable';
+            }
+
+            const el = document.getElementById('current-session');
+            if (el) {
+                el.textContent = sn;
+                el.style.color = sc;
+            }
+        }
+
+        function formatSessionHours(utcStart, utcEnd, offset) {
+            const start = ((utcStart + offset) % 24 + 24) % 24;
+            const end = ((utcEnd + offset) % 24 + 24) % 24;
+            return `${formatHour12(start)} - ${formatHour12(end)}`;
+        }
+
+        function formatHour12(hour24) {
+            const period = hour24 >= 12 ? 'PM' : 'AM';
+            const hour12 = hour24 % 12 || 12;
+            return `${hour12} ${period}`;
+        }
+
+        function updateSignalsTable(signals) {
+            if (!Array.isArray(signals)) {
+                document.getElementById('signals-tbody').innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-500">Error loading signals</td></tr>';
+                return;
+            }
+            const active = [], blocked = [];
+            for (const s of signals) {
+                if (s.signal === 'LONG' || s.signal === 'SHORT') active.push(s);
+                else if (s.risk_blocked) blocked.push(s);
+            }
+            const allSignals = [...active, ...blocked.sort((a, b) => (b.score || 0) - (a.score || 0))];
+            
+            // Pagination
+            const totalPages = Math.ceil(allSignals.length / state.itemsPerPage);
+            const start = (state.signalsPage - 1) * state.itemsPerPage;
+            const display = allSignals.slice(start, start + state.itemsPerPage);
+            
+            document.getElementById('signals-count').textContent = `${active.length} active${blocked.length ? ' · ' + blocked.length + ' risky' : ''}`;
+            renderPagination('signals-pagination', state.signalsPage, totalPages, 'goToSignalsPage');
+
+            if (display.length === 0) {
+                const errInfo = state.scanData && state.scanData.ok 
+                    ? 'System online — no active signals for current market conditions.' 
+                    : 'No scan data — run a scan to populate signals.';
+                document.getElementById('signals-tbody').innerHTML = `<tr><td colspan="8" class="py-12 text-center text-slate-500">
+                    <div class="text-sm mb-3">${escapeHtml(errInfo)}</div>
+                    <button onclick="triggerScan()" class="text-amber-400 hover:underline text-xs">▶ Run Scan</button>
+                </td></tr>`;
+                return;
+            }
+
+            let html = '';
+            for (const s of display) {
+                const isActive = s.signal === 'LONG' || s.signal === 'SHORT';
+                const isBlocked = s.risk_blocked;
+                const sigColor = s.signal === 'LONG' ? 'win-positive' : s.signal === 'SHORT' ? 'win-negative' : 'text-slate-500';
+                const regime = s.regime?.regime || s.regime || 'SIDEWAYS';
+                const regimeLabel = {BULL:'Uptrend',BEAR:'Downtrend',SIDEWAYS:'Ranging',HIGH_VOL:'Volatile'}[regime] || regime;
+                const regimeCls = regime==='BULL'?'text-emerald-400':regime==='BEAR'?'text-rose-400':regime==='HIGH_VOL'?'text-amber-400':'text-slate-400';
+                const risk = s.risk_score || 0;
+                const price = s.price || s.entry_price || 0;
+                const entry = s.entry || s.entry_price || price;
+                const sl = s.sl || 0;
+                const tp = s.tp || 0;
+
+                let badge = '';
+                if (isBlocked) {
+                    const r = s.risk_reason || '';
+                    badge = `<td class="py-4 px-4"><span class="text-[10px] bg-amber-500/20 text-amber-400 px-2 py-1 rounded font-semibold">BLOCKED</span><div class="text-[9px] text-slate-500 mt-1 max-w-[120px] truncate">${escapeHtml(r.substring(0, 30))}</div></td>`;
+                } else if (isActive) {
+                    badge = `<td class="py-4 px-4"><span class="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded font-semibold">ACTIVE</span></td>`;
+                } else {
+                    badge = `<td class="py-4 px-4"><span class="text-[10px] bg-slate-500/20 text-slate-400 px-2 py-1 rounded font-semibold">WAIT</span></td>`;
+                }
+
+                const prHtml = s.position_reduction && s.position_reduction < 1 ? `<div class="text-[9px] text-amber-400 mt-1">${Math.round(s.position_reduction * 100)}% size</div>` : '';
+
+                const cvd = s.enhanced?.cvd_1h || 0;
+                const cvd_intensity = Math.min(Math.abs(cvd) / 5, 100);
+                const obi = s.enhanced?.obi_01 || 0;
+                const obi_label = obi > 0.1 ? 'BULL' : obi < -0.1 ? 'BEAR' : 'NEUTRAL';
+                const obi_color = obi > 0.1 ? 'text-emerald-400' : obi < -0.1 ? 'text-rose-400' : 'text-slate-500';
+                const volume_chg = (parseFloat(s.enhanced?.volume_ma_ratio) || 1) - 1;
+                const chgStr = volume_chg !== 0 ? (volume_chg > 0 ? '+' : '') + (volume_chg * 100).toFixed(1) + '%' : '-';
+                const chgCls = volume_chg > 0.02 ? 'price-chg-up' : volume_chg < -0.02 ? 'price-chg-down' : 'text-slate-500';
+                html += `<tr class="border-b border-white/5 hover:bg-white/[0.01] transition-colors ${isBlocked ? 'opacity-70' : ''}" onclick="openDeepScan('${escapeHtml(s.symbol || '')}')" style="cursor:pointer" title="Click for deep scan">
+                    <td class="py-6 px-4">
+                        <div class="flex items-center gap-3">
+                            ${coinIconHTML(s.symbol || '')}
+                            <div class="flex flex-col">
+                                <span class="text-white font-bold text-sm">${escapeHtml((s.symbol||'').replace('USDT','') + ' / USDT')}</span>
+                                <span class="text-[10px] copyable-price" onclick="event.stopPropagation();copyToClipboard('${entry}')">Entry: $${formatPrice(entry)}</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="py-6 px-4"><span class="${sigColor} font-bold text-[10px] tracking-widest uppercase">${escapeHtml(s.signal)}</span></td>
+                    <td class="py-6 px-4">
+                        <div class="text-slate-200 text-sm">$${formatPrice(price)}</div>
+                    </td>
+                    <td class="py-6 px-4 text-right">
+                        <span class="text-sm font-bold ${chgCls}">${chgStr}</span>
+                    </td>
+                    <td class="py-6 px-4 relative group">
+                        <span class="text-white font-medium text-sm border-b border-dashed border-slate-500 cursor-help">${escapeHtml(s.confidence || 0)}%</span>
+                        ${buildBreakdownTooltip(s.score_breakdown)}
+                    </td>
+                    <td class="py-6 px-4 ${regimeCls} text-xs font-medium">${escapeHtml(regimeLabel)}</td>
+                    <td class="py-6 px-4">
+                        <div class="flex flex-col gap-1.5">
+                            <div class="tp-price copyable-price font-mono font-bold text-[13px]" 
+                                 onclick="event.stopPropagation();copyToClipboard('${tp}')">
+                                TP: $${formatPrice(tp)}
+                            </div>
+                            <div class="sl-price copyable-price font-mono font-bold text-[13px]" 
+                                 onclick="event.stopPropagation();copyToClipboard('${sl}')">
+                                SL: $${formatPrice(sl)}
+                            </div>
+                        </div>
+                    </td>
+                    ${badge}</tr>`;
+            }
+            document.getElementById('signals-tbody').innerHTML = html;
+        }
+
+        // ============================================
+        // CALENDAR with Hover
+        // ============================================
+        function updateCalendar(dailyData) {
+            const year = state.calendarYear;
+            const month = state.calendarMonth;
+            const grid = document.getElementById('calendar-grid');
+
+            const firstDay = new Date(year, month - 1, 1).getDay();
+            const daysInMonth = new Date(year, month, 0).getDate();
+            const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
+
+            // Create date map from daily stats data
+            const dateMap = {};
+            for (const item of dailyData) {
+                const d = item.scan_date;
+                if (d && d.substring(0, 7) === monthPrefix) {
+                    const total = (item.wins || 0) + (item.losses || 0);
+                    dateMap[d] = {
+                        wins: item.wins || 0,
+                        losses: item.losses || 0,
+                        total: total,
+                        wr: item.win_rate || 0
+                    };
+                }
+            }
+
+            let html = '';
+            for (let i = 0; i < firstDay; i++) html += '<div class="h-20"></div>';
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const ds = `${monthPrefix}-${String(day).padStart(2, '0')}`;
+                const data = dateMap[ds];
+                let wr = null, bg = 'bg-white/[0.02] border border-white/5', tc = 'text-slate-600';
+                
+                if (data && data.total > 0) {
+                    wr = data.wr.toFixed(1);
+                    const wn = parseFloat(wr);
+                    if (wn >= 60) { bg = 'bg-emerald-500/[0.08] border border-emerald-500/20'; tc = 'text-emerald-400'; }
+                    else if (wn >= 40) { bg = 'bg-yellow-500/[0.08] border border-yellow-500/20'; tc = 'text-yellow-400'; }
+                    else { bg = 'bg-rose-500/[0.08] border border-rose-500/20'; tc = 'text-rose-500'; }
+                }
+                
+                // Minimalist cell: only day number + WR% in cell
+                // Full trade detail appears on hover tooltip
+                const tooltip = data && data.total > 0
+                    ? `<div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 bg-slate-900 border border-white/10 rounded-xl px-3 py-2.5 text-left text-xs whitespace-nowrap shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200">
+                        <div class="text-slate-400 font-semibold mb-1">${ds}</div>
+                        <div class="text-emerald-400">W: ${data.wins}</div>
+                        <div class="text-rose-400">L: ${data.losses}</div>
+                        <div class="text-amber-400">WR: ${wr !== null ? wr + '%' : '-'}</div>
+                      </div>`
+                    : `<div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs whitespace-nowrap shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200">
+                        <div class="text-slate-500">${ds} — No trades</div>
+                      </div>`;
+
+                const clickHandler = data && data.total > 0 ? `onclick="toggleHistoryByDate('${ds}')"` : '';
+                const selectedClass = state.selectedDate === ds ? 'ring-2 ring-amber-400/70' : '';
+                html += `<div class="relative group h-20 rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all duration-200 hover:scale-105 hover:bg-white/5 ${bg} ${selectedClass}" ${clickHandler}>
+                    ${tooltip}
+                    <span class="text-[13px] font-bold text-white/80">${day}</span>
+                    ${wr !== null ? `<span class="text-[11px] font-bold mt-0.5 ${tc}">${wr}%</span>` : '<span class="text-[9px] text-slate-700 mt-0.5">—</span>'}
+                </div>`;
+            }
+            grid.innerHTML = html;
+            document.getElementById('calendar-month').textContent = new Date(year, month - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        }
+
+        function toggleHistoryByDate(dateStr) {
+            // Toggle: klik lagi di tanggal yang sama = clear filter
+            if (state.selectedDate === dateStr) {
+                state.selectedDate = null;
+            } else {
+                state.selectedDate = dateStr;
+            }
+            state.historyPage = 1;
+            // Reload calendar untuk update selected highlight
+            if (state.dailyStats) {
+                updateCalendar(state.dailyStats);
+            }
+            applyHistoryFilter();
+        }
+
+        // ============================================
+        // DAILY STATS & HISTORY
+        // ============================================
+        function updateDailyStats(data) {
+            if (!data || data.length === 0) {
+                document.getElementById('daily-stats-grid').innerHTML = '<div class="text-center text-slate-500 py-4">No data for this period</div>';
+                return;
+            }
+            const rangeLabel = state.timeRange === 7 ? '7D' : state.timeRange === 30 ? '1M' : state.timeRange === 90 ? '3M' : 'ALL';
+            document.getElementById('daily-stats-title').textContent = `Daily Performance (${rangeLabel})`;
+            let html = '<div class="grid grid-cols-7 gap-2 text-[10px] font-black text-slate-600 uppercase tracking-wider mb-2 py-2 border-b border-white/5">' +
+                '<div>Date</div><div class="text-right">WR</div><div class="text-right">W/L</div><div class="text-right">Profit Factor</div><div class="text-right">Longs</div><div class="text-right">Shorts</div><div class="text-right">Active</div></div>';
+            for (const d of data.slice(0, 30)) {
+                const wr = d.win_rate || 0;
+                const wrClass = wr >= 60 ? 'text-emerald-400' : wr >= 40 ? 'text-yellow-400' : 'text-rose-400';
+                const dateStr = d.scan_date ? d.scan_date.substring(5) : '-';
+                const wins = d.wins || 0;
+                const losses = d.losses || 0;
+                const pf = d.profit_factor != null ? Number(d.profit_factor).toFixed(2) : '-';
+                const pfClass = pf >= 1.5 ? 'text-emerald-400' : pf >= 1.0 ? 'text-amber-400' : 'text-rose-400';
+
+                html += `<div class="grid grid-cols-7 gap-2 text-[11px] py-2 border-b border-white/5 hover:bg-white/[0.02]">
+                    <span class="text-slate-400">${escapeHtml(dateStr)}</span>
+                    <span class="text-right ${wrClass} font-bold">${wr.toFixed(1)}%</span>
+                    <span class="text-right text-slate-300">${wins}/${losses}</span>
+                    <span class="text-right ${pfClass} font-bold">${pf}</span>
+                    <span class="text-right text-emerald-400">${d.longs || 0}</span>
+                    <span class="text-right text-rose-300">${d.shorts || 0}</span>
+                    <span class="text-right text-sky-400">${d.opens || 0}</span>
+                </div>`;
+            }
+            document.getElementById('daily-stats-grid').innerHTML = html;
+        }
+
+        function applyHistoryFilter() {
+            if (!state.closedHistory) return;
+
+            // Start with all data
+            let displayData = state.closedHistory;
+
+            // Filter by date if selected
+            if (state.selectedDate) {
+                displayData = displayData.filter(h => {
+                    const d = h.scan_date || (h.timestamp ? h.timestamp.split('T')[0] : null);
+                    return d === state.selectedDate;
+                });
+            }
+
+            // Filter by win/loss
+            if (state.currentFilter === 'win') {
+                displayData = displayData.filter(h => h.result === 'WIN');
+            } else if (state.currentFilter === 'loss') {
+                displayData = displayData.filter(h => h.result === 'LOSS');
+            }
+
+            // Pagination
+            const totalPages = Math.ceil(displayData.length / state.itemsPerPage);
+            const start = (state.historyPage - 1) * state.itemsPerPage;
+            const pageData = displayData.slice(start, start + state.itemsPerPage);
+
+            renderPagination('history-pagination', state.historyPage, totalPages, 'goToHistoryPage');
+            renderHistoryItems(pageData);
+        }
+
+        function updateHistory(closedData) {
+            if (!closedData || closedData.length === 0) {
+                document.getElementById('history-container').innerHTML = '<div class="text-center text-slate-500 py-8">No closed trades for this period.</div>';
+                document.getElementById('history-pagination').innerHTML = '';
+                return;
+            }
+
+            state.closedHistory = closedData;
+            applyHistoryFilter();
+        }
+
+        function renderHistoryItems(items) {
+            const container = document.getElementById('history-container');
+            if (items.length === 0) {
+                container.innerHTML = '<div class="text-center text-slate-500 py-8">No trades found</div>';
+                return;
+            }
+            container.innerHTML = items.map(h => {
+                const isWin = h.result === 'WIN';
+                const isClosed = h.result === 'WIN' || h.result === 'LOSS';
+                const cc = isWin ? 'win-positive' : 'win-negative';
+                const pnl = h.pnl_pct || 0;
+                const rawTs = isClosed && h.exit_timestamp ? h.exit_timestamp : h.timestamp;
+                const dt = rawTs ? new Date(rawTs) : null;
+                const date = dt ? `${String(dt.getDate()).padStart(2,'0')}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getFullYear()).slice(-2)} ${String(dt.getHours()%12||12).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')} ${dt.getHours()>=12?'PM':'AM'}` : (h.scan_date || '-');
+                const sc = h.signal === 'LONG' ? 'text-emerald-400' : 'text-rose-400';
+                return `<div class="glass p-4 rounded-2xl flex items-center justify-between hover:bg-white/[0.05] transition-colors">
+                    <div class="flex items-center gap-3">
+                        ${coinIconHTML(h.symbol)}
+                        <div><div class="text-white font-semibold text-sm">${escapeHtml(h.symbol.replace('USDT','') + '/USDT')}</div><div class="text-[10px] text-slate-500">${escapeHtml(date)} · <span class="${sc}">${escapeHtml(h.signal)}</span> · ${escapeHtml(h.regime || 'SIDEWAYS')}</div></div>
+                    </div>
+                    <div class="text-right"><div class="${cc} font-bold">${isWin ? '+' : ''}${pnl.toFixed(1)}%</div><div class="text-xs text-slate-500">${h.confidence || 0}% conf</div></div>
+                </div>`;
+            }).join('');
+        }
+
+        // ============================================
+        // MICROSTRUCTURE & EVENTS
+        // ============================================
+        async function loadMicrostructureData(force = false) {
+            const TTL = 3 * 60 * 1000; // 3 minutes
+            const now = Date.now();
+            if (!force && now - state._cache.microAt < TTL && state._loaded.microstructure) return;
+            state._loaded.microstructure = true;
+            state._cache.microAt = now;
+            
+            // Update sentiment overview from scan data
+            if (state.scanData && state.scanData.data) {
+                const signals = state.scanData.data.filter(s => s.enhanced);
+                const sentiments = signals.map(s => s.enhanced.sentimentScore || 50);
+                const avgSentiment = sentiments.length > 0 ? sentiments.reduce((a, b) => a + b, 0) / sentiments.length : 50;
+                const kvStatuses = signals.map(s => s.enhanced.cvd?.status || 'NEUTRAL');
+                const dominantKvd = kvStatuses.filter(s => s !== 'NEUTRAL').length > kvStatuses.length / 2 ? (kvStatuses.includes('ACCUMULATION') ? 'ACCUMULATION' : 'DISTRIBUTION') : 'NEUTRAL';
+                const lsRatios = signals.map(s => s.enhanced.longShortRatio?.latest_long_pct || 50);
+                const avgLs = lsRatios.length > 0 ? lsRatios.reduce((a, b) => a + b, 0) / lsRatios.length : 50;
+                const ttRatios = signals.map(s => s.enhanced.topTrader?.longRatio || 0.5);
+                const avgTt = ttRatios.length > 0 ? ttRatios.reduce((a, b) => a + b, 0) / ttRatios.length * 100 : 50;
+                document.getElementById('sentiment-score').textContent = avgSentiment.toFixed(1);
+                document.getElementById('cvd-status').textContent = dominantKvd;
+                document.getElementById('ls-ratio').textContent = avgLs.toFixed(0) + '%';
+                document.getElementById('top-trader-ratio').textContent = avgTt.toFixed(0) + '%';
+                const allSignals = [];
+                signals.forEach(s => { if (s.enhanced.compositeSignals) allSignals.push(...s.enhanced.compositeSignals); });
+                const signalCounts = {};
+                allSignals.forEach(sig => { signalCounts[sig.type||'OTHER'] = (signalCounts[sig.type||'OTHER']||0)+1; });
+                const compositeHtml = Object.entries(signalCounts).sort((a,b) => b[1]-a[1]).slice(0,5).map(([type,count]) => {
+                    const color = type.includes('CONTRARIAN')?'bg-rose-500/20 text-rose-400':type.includes('ORDER')?'bg-emerald-500/20 text-emerald-400':type.includes('FUNDING')?'bg-amber-500/20 text-amber-400':'bg-sky-500/20 text-sky-400';
+                    return `<span class=\"text-[10px] ${color} px-2 py-1 rounded-lg\">${type}: ${count}</span>`;
+                }).join('');
+                document.getElementById('composite-signals').innerHTML = compositeHtml || '<span class=\"text-[10px] text-slate-500\">No composite signals</span>';
+                document.getElementById('sentiment-updated').textContent = formatTimeWithOffset(new Date().toISOString(), state.timezoneOffset);
+            } else {
+                document.getElementById('sentiment-updated').textContent = 'Run scan to load';
+                document.getElementById('composite-signals').innerHTML = '<span class=\"text-[10px] text-slate-500\">No data — run a scan first</span>';
+            }
+            
+            if (state.scanData && state.scanData.data) updateWhaleData(state.scanData.data);
+            else document.getElementById('whale-container').innerHTML = '<div class=\"text-center text-slate-500 py-8\">No whale data. Run a scan first.</div>';
+        }
+
+        function updateWhaleData(signals) {
+            const container = document.getElementById('whale-container');
+            const wm = signals.filter(s => s.enhanced).sort((a, b) => Math.abs(b.enhanced.cvd_1h || 0) - Math.abs(a.enhanced.cvd_1h || 0)).slice(0, 8);
+            
+            if (wm.length === 0) {
+                container.innerHTML = '<div class="text-center text-slate-500 py-8">No microstructure data available. Run scan first.</div>';
+                return;
+            }
+            
+            let html = '<div class="space-y-4">';
+            for (const s of wm) {
+                const enh = s.enhanced || {};
+                const cvd = enh.cvd_1h || 0;
+                const obi = enh.obi_01 || 0;
+                const cvd_intensity = Math.min(Math.abs(cvd) * 10, 100);
+                const bar_color = cvd >= 0 ? 'bg-emerald-500' : 'bg-rose-500';
+                const label_color = cvd >= 0 ? 'text-emerald-400' : 'text-rose-400';
+                
+                // Extract additional data
+                const longShort = enh.longShortRatio || {};
+                const ls_pct = longShort.latest_long_pct || 50;
+                const ls_signal = longShort.contrarian_signal || '';
+                
+                const taker = enh.takerVolume || {};
+                const buy_pct = (taker.buyPct || 50);
+                const sell_pct = (taker.sellPct || 50);
+                const flow_signal = taker.flowSignal || '';
+                
+                const funding = enh.funding || {};
+                const fund_pct = funding.annualizedPct || 0;
+                const fund_signal = funding.extremeSignal || '';
+                
+                const topTrader = enh.topTrader || {};
+                const tt_long = (topTrader.longRatio || 0.5) * 100;
+                
+                html += `
+                <div class="glass p-4 rounded-2xl hover:bg-white/[0.05] transition-all group">
+                    <div class="flex justify-between items-center mb-3">
+                        <div class="flex items-center gap-3">
+                            <span class="text-white font-bold text-sm">${escapeHtml(s.symbol)}</span>
+                            <span class="text-[10px] bg-white/5 px-2 py-0.5 rounded-lg text-slate-400">OBI: ${obi.toFixed(2)}</span>
+                            ${ls_signal ? `<span class="text-[9px] bg-rose-500/20 text-rose-400 px-1.5 py-0.5 rounded">${ls_signal}</span>` : ''}
+                            ${flow_signal ? `<span class="text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded">${flow_signal}</span>` : ''}
+                            ${fund_signal ? `<span class="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded">${fund_signal}</span>` : ''}
+                        </div>
+                        <div class="text-[11px] font-bold ${label_color}">${cvd >= 0 ? 'BUY' : 'SELL'} AGGRESSION</div>
+                    </div>
+                    
+                    <div class="relative w-full h-2 bg-white/5 rounded-full overflow-hidden mb-3">
+                        <div class="absolute h-full ${bar_color} transition-all duration-1000" style="width: ${cvd_intensity}%"></div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+                        <div class="bg-white/5 rounded-lg p-2">
+                            <div class="text-[9px] text-slate-500 uppercase font-bold">L/S Ratio</div>
+                            <div class="text-xs text-white font-medium">${ls_pct.toFixed(0)}% Long</div>
+                        </div>
+                        <div class="bg-white/5 rounded-lg p-2">
+                            <div class="text-[9px] text-slate-500 uppercase font-bold">Taker Volume</div>
+                            <div class="text-xs text-white font-medium">${buy_pct.toFixed(0)}% Buy / ${sell_pct.toFixed(0)}% Sell</div>
+                        </div>
+                        <div class="bg-white/5 rounded-lg p-2">
+                            <div class="text-[9px] text-slate-500 uppercase font-bold">Funding</div>
+                            <div class="text-xs text-white font-medium">${fund_pct.toFixed(2)}% ${fund_pct > 0 ? 'Longs pay' : 'Shorts pay'}</div>
+                        </div>
+                        <div class="bg-white/5 rounded-lg p-2">
+                            <div class="text-[9px] text-slate-500 uppercase font-bold">Top Trader</div>
+                            <div class="text-xs text-white font-medium">${tt_long.toFixed(0)}% Long</div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-between">
+                        <span class="text-[10px] text-slate-500">CVD 1h: ${cvd.toFixed(1)}</span>
+                        <span class="text-[10px] text-white font-medium">${s.confidence || 0}% Conf. | ${s.regime || 'SIDEWAYS'}</span>
+                    </div>
+                </div>`;
+            }
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        // ============================================
+        // POLLING & EVENTS
+        // ============================================
+        const pollManager = {
+            interval: null, baseInterval: 60000, maxInterval: 300000, currentInterval: 60000, consecutiveErrors: 0,
+            start() { this.stop(); this.tick(); this.interval = setInterval(() => this.tick(), this.currentInterval); },
+            stop() { if (this.interval) { clearInterval(this.interval); this.interval = null; } },
+            async tick() {
+                if (document.hidden) return;
+                try { await loadDashboard(); this.consecutiveErrors = 0; this.currentInterval = Math.min(this.currentInterval * 1.1, this.maxInterval); }
+                catch (e) { this.consecutiveErrors++; this.currentInterval = Math.min(this.baseInterval * Math.pow(2, this.consecutiveErrors), this.maxInterval); }
+                this.stop(); this.interval = setInterval(() => this.tick(), this.currentInterval);
+            },
+            reset() { this.currentInterval = this.baseInterval; this.consecutiveErrors = 0; this.stop(); this.tick(); this.interval = setInterval(() => this.tick(), this.currentInterval); }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // Auto-load BTC Trend & Sentiment data for header (deferred slightly)
+            setTimeout(() => loadSentimentData(), 500);
+            
+            // Sync timezone selector with stored value
+            const tzSelect = document.getElementById('timezone-select');
+            if (tzSelect && state.timezone) tzSelect.value = state.timezone;
+            
+            // Initialize Lucide icons — lucide loaded with defer, init after DOM ready
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+            else window.addEventListener('load', () => { if (typeof lucide !== 'undefined') lucide.createIcons(); });
+
+            // 1. Dock Navigation Logic
+            const dockItems = document.querySelectorAll('.dock-item');
+            dockItems.forEach(item => {
+                item.addEventListener('click', function(e) {
+                    const tab = this.getAttribute('data-tab');
+                    if (!tab) return;
+                    
+                    // Update active state in UI
+                    dockItems.forEach(i => i.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    // Show target content, hide others
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+                    const targetContent = document.getElementById(`tab-${tab}`);
+                    if (targetContent) {
+                        targetContent.classList.remove('hidden');
+                        state.activeTab = tab;
+                        // Each load function uses TTL cache — instant render if data is fresh
+                        if (tab === 'microstructure') loadMicrostructureData();
+                        else if (tab === 'history') loadHistoryData(true);
+                        else if (tab === 'correlation') loadSentimentData();
+                        else if (tab === 'volatile') loadVolatileData();
+                    }
+                });
+            });
+
+            // 2. Global Controls & Filters
+            document.getElementById('refresh-btn')?.addEventListener('click', () => {
+                // Don't call pollManager.reset() AND forceRefresh() together — that's double API calls.
+                // Just trigger the backend scan; dashboard will auto-update after 3s.
+                showToast('Refreshing market data...');
+                forceRefresh();
+            });
+
+            document.getElementById('settings-btn')?.addEventListener('click', () => {
+                openSettings();
+            });
+
+            document.querySelectorAll('.time-filter').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    document.querySelectorAll('.time-filter').forEach(b => { 
+                        b.classList.remove('bg-white/10', 'text-white', 'shadow-lg'); 
+                        b.classList.add('text-slate-400'); 
+                    });
+                    e.target.classList.add('bg-white/10', 'text-white', 'shadow-lg');
+                    e.target.classList.remove('text-slate-400');
+                    const range = e.target.dataset.range;
+                    state.timeRange = range === 'all' ? 'all' : parseInt(range);
+                    state.historyPage = 1;
+                    // Force re-fetch because range changed
+                    state._cache.historyAt = 0;
+                    await loadHistoryData(true);
+                });
+            });
+
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.filter-btn').forEach(b => { 
+                        b.classList.remove('active', 'bg-white/20', 'text-white'); 
+                        b.classList.add('text-slate-400'); 
+                    });
+                    e.target.classList.add('active', 'bg-white/20', 'text-white');
+                    e.target.classList.remove('text-slate-400');
+                    state.currentFilter = e.target.dataset.filter;
+                    state.historyPage = 1;
+                    applyHistoryFilter();
+                });
+            });
+
+            // 4. Timezone Initializer
+            const tzBtn = document.getElementById('timezone-btn');
+            const tzDrop = document.getElementById('timezone-dropdown');
+            const tzList = document.getElementById('timezone-list');
+            if (tzList) {
+                tzList.innerHTML = timezones.map(tz =>
+                    `<button class="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-white/10 transition-colors ${tz.name === state.timezone ? 'text-amber-400 font-bold' : 'text-slate-300'}" onclick="setTimezone('${tz.name}', ${tz.offset})">${tz.label}</button>`
+                ).join('');
+            }
+            if (tzBtn) tzBtn.addEventListener('click', () => tzDrop.classList.toggle('hidden'));
+            document.addEventListener('click', (e) => { 
+                if (tzBtn && !tzBtn.contains(e.target) && tzDrop && !tzDrop.contains(e.target)) tzDrop.classList.add('hidden'); 
+            });
+
+            // 5. Calendar Dropdown Logic
+            const calBtn = document.getElementById('cal-nav-btn');
+            const calDrop = document.getElementById('cal-dropdown');
+            if (calBtn) {
+                calBtn.addEventListener('click', () => { renderCalDropdown(); calDrop.classList.toggle('hidden'); });
+                document.addEventListener('click', (e) => { 
+                    if (calBtn && !calBtn.contains(e.target) && calDrop && !calDrop.contains(e.target)) calDrop.classList.add('hidden'); 
+                });
+                document.getElementById('cal-prev')?.addEventListener('click', (e) => { e.stopPropagation(); ddYear--; renderCalDropdown(); });
+                document.getElementById('cal-next')?.addEventListener('click', (e) => { e.stopPropagation(); ddYear++; renderCalDropdown(); });
+            }
+
+            // 6. Render cached data immediately (before any API call)
+            if (state.scanData && state.scanData.data) {
+                updateSummaryCards(state.scanData);
+                updateSignalsTable(state.scanData.data);
+            }
+            if (state.dbStats) updateWinRateStats(state.dbStats);
+            if (state.dailyStats) {
+                updateCalendar(state.dailyStats);
+                updateDailyStats(state.dailyStats);
+                // Show cached WR
+                const valid = state.dailyStats.filter(d => d.win_rate != null);
+                if (valid.length > 0) {
+                    const avgWR = valid.reduce((s, d) => s + (d.win_rate || 0), 0) / valid.length;
+                    const wrEl = document.getElementById('overall-wr');
+                    if (wrEl) wrEl.textContent = formatPercent(avgWR);
+                    updateWRGraphic(avgWR);
+                }
+            }
+
+            // 7. Start Dashboard Polling
+            try {
+                loadSettings();
+                // Stagger initial load: render frame first, then fetch data
+                requestAnimationFrame(() => {
+                    setTimeout(() => {
+                        loadDashboard();
+                        pollManager.start();
+                    }, 100);
+                });
+                document.addEventListener('visibilitychange', () => { 
+                    if (document.hidden) pollManager.stop(); 
+                    else { loadDashboard(); pollManager.start(); } 
+                });
+            } catch (err) { /* silent */ }
+            
+            const tzLabel = document.getElementById('timezone-label');
+            if (tzLabel) tzLabel.textContent = state.timezone;
+        });
+
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        let ddYear = state.calendarYear;
+
+        function renderCalDropdown() {
+            const label = document.getElementById('cal-year-label');
+            if (!label) return;
+            label.textContent = ddYear;
+            const mGrid = document.getElementById('cal-months');
+            mGrid.innerHTML = months.map((m, i) => {
+                const active = ddYear === state.calendarYear && (i + 1) === state.calendarMonth;
+                return `<button class="px-2 py-1.5 text-xs rounded-lg ${active ? 'bg-amber-500/20 text-amber-400 font-bold' : 'text-slate-400 hover:bg-white/10'}" data-month="${i + 1}">${m}</button>`;
+            }).join('');
+            mGrid.querySelectorAll('button').forEach(b => {
+                b.addEventListener('click', () => {
+                    state.calendarMonth = parseInt(b.dataset.month);
+                    state.calendarYear = ddYear;
+                    document.getElementById('cal-dropdown').classList.add('hidden');
+                    loadHistoryData();
+                });
+            });
+        }
+
+        function setTimezone(zoneValue) {
+            const opt = document.querySelector(`#timezone-select option[value="${zoneValue}"]`);
+            const offset = opt ? parseFloat(opt.dataset.offset) : 7;
+            state.timezone = zoneValue;
+            state.timezoneOffset = offset;
+            localStorage.setItem('screener_timezone', zoneValue);
+            localStorage.setItem('screener_offset', offset);
+            document.getElementById('timezone-select').value = zoneValue;
+            loadDashboard();
+        }
+
+        // ============================================
+        // VOLATILE & DEEP SCAN
+        // ============================================
+// ============================================
+        // VOLATILE & SHORT SCORING
+        // ============================================
+        function calcVolatileScore(s) {
+            let score = 0;
+            const atr = s.atr || 0, price = s.price || s.entry || 1;
+            const atrPct = (atr / price) * 100;
+            if (atrPct > 2.5) score += 25; else if (atrPct > 1.5) score += 15; else if (atrPct > 0.8) score += 5;
+            const volZ = s.enhanced?.volume_zscore_1h || s.enhanced?.volume_zscore_4h || 0;
+            if (volZ > 2.0) score += 25; else if (volZ > 1.0) score += 15; else if (volZ > 0.5) score += 5;
+            const tf = s.tf_metrics || {}; let b = 0;
+            for (const t of ['15m','1h','4h']) if (tf[t]?.breakout_bull || tf[t]?.breakout_bear) b++;
+            if (b >= 2) score += 25; else if (b === 1) score += 12;
+            const oi = Math.abs(s.enhanced?.oi_change_1h || 0);
+            if (oi > 10) score += 15; else if (oi > 5) score += 10; else if (oi > 2) score += 5;
+            if (s.regime === 'HIGH_VOL') score += 10;
+            return Math.min(100, score);
+        }
+        function calcShortPotential(s) {
+            let score = 0;
+            const e = s.enhanced || {};
+            const fr = (e.funding?.currentRate || 0) * 100;
+            if (fr > 0.10) score += 25; else if (fr > 0.05) score += 18; else if (fr > 0.03) score += 10; else if (fr < -0.05) score -= 10;
+            const retailLong = e.longShortRatio?.latest_long_pct || 0.5;
+            if (retailLong > 0.75) score += 20; else if (retailLong > 0.65) score += 12; else if (retailLong > 0.60) score += 6;
+            const whaleLong = e.topTrader?.longRatio || 0.5;
+            if (whaleLong < 0.45 && retailLong > 0.60) score += 20; else if (whaleLong < 0.50) score += 8;
+            const bbPos = s.features?.bb_position || e.bb_position || 0.5;
+            if (bbPos > 0.90) score += 15; else if (bbPos > 0.80) score += 10; else if (bbPos < 0.20) score -= 5;
+            const takerBuy = e.takerVolume?.buyPct || 0.5;
+            if (takerBuy < 0.40) score += 5; else if (takerBuy > 0.60) score -= 5;
+            return Math.max(0, Math.min(100, score));
+        }
+        function vScoreLabel(v) { return v >= 70 ? 'HIGH' : v >= 40 ? 'MED' : v >= 20 ? 'LOW' : '--'; }
+        function sScoreLabel(v) { return v >= 70 ? 'HIGH' : v >= 50 ? 'MED' : v >= 30 ? 'LOW' : '--'; }
+
+        async function loadVolatileData() {
+            const tbody = document.getElementById('volatile-tbody');
+            // If scan data exists, render immediately from cache — no network call
+            if (state.scanData && state.scanData.data) {
+                const active = state.scanData.data.filter(s => s.signal === 'LONG' || s.signal === 'SHORT');
+                // Score and filter: show coins with volatile >= 15 OR short >= 40 (more lenient)
+                const scored = active.map(s => ({...s, vScore: calcVolatileScore(s), sScore: calcShortPotential(s)}));
+                const filtered = scored.filter(s => s.vScore >= 15 || s.sScore >= 40);
+                // If filter is too strict (no enhanced data), show top signals by score anyway
+                const display = filtered.length > 0 ? filtered : scored.slice(0, 10);
+                display.sort((a,b) => (b.vScore + b.sScore) - (a.vScore + a.sScore));
+                renderVolatileTable(display);
+            } else {
+                tbody.innerHTML = '<tr><td colspan="7" class="py-12 text-center text-slate-500">No scan data. Run a scan first.</td></tr>';
+            }
+        }
+        function renderVolatileTable(data) {
+            const tbody = document.getElementById('volatile-tbody');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="py-12 text-center text-slate-500">No volatile or short-potential coins detected</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.map(s => {
+                const sigBg = s.signal === 'LONG' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400';
+                const atr = s.atr || 0, price = s.price || s.entry || 1;
+                const atrPct = ((atr / price) * 100).toFixed(1);
+                const volZ = (s.enhanced?.volume_zscore_1h || s.enhanced?.volume_zscore_4h || 0).toFixed(1);
+                const tp = s.tp || 0, sl = s.sl || 0;
+                const vScore = s.vScore || 0, sScore = s.sScore || 0;
+                const vCls = vScore >= 70 ? 'text-amber-400' : vScore >= 40 ? 'text-yellow-400' : vScore >= 20 ? 'text-sky-400' : 'text-slate-500';
+                const sCls = sScore >= 70 ? 'text-rose-400' : sScore >= 50 ? 'text-orange-400' : sScore >= 30 ? 'text-amber-300' : 'text-emerald-400';
+                return `<tr class="border-b border-white/5 hover:bg-white/[0.01] transition-colors">
+                    <td class="py-3 px-3"><div class="flex items-center gap-2">${coinIconHTML(s.symbol)}<span class="text-white font-bold text-sm">${escapeHtml((s.symbol||'').replace('USDT','') + '/USDT')}</span></div></td>
+                    <td class="py-3 px-3"><span class="text-[10px] font-black px-2 py-0.5 rounded-lg border ${sigBg}">${s.signal}</span></td>
+                    <td class="py-3 px-3 text-right font-mono text-xs ${atrPct > 1.5 ? 'text-amber-400' : 'text-slate-400'}">${atrPct}%</td>
+                    <td class="py-3 px-3 text-right font-mono text-xs ${volZ > 1 ? 'text-amber-400' : 'text-slate-400'}">${volZ}</td>
+                    <td class="py-3 px-3 text-right font-bold text-xs ${vCls}">${vScoreLabel(vScore)} ${vScore}</td>
+                    <td class="py-3 px-3 text-right font-bold text-xs ${sCls}">${sScoreLabel(sScore)} ${sScore}</td>
+                    <td class="py-3 px-3">
+                        <div class="flex flex-col gap-0.5">
+                            <span class="tp-price copyable-price font-mono font-bold text-[11px]" onclick="copyToClipboard('${(tp||0).toFixed(4)}')">TP: $${formatPrice(tp||0)}</span>
+                            <span class="sl-price copyable-price font-mono font-bold text-[11px]" onclick="copyToClipboard('${(sl||0).toFixed(4)}')">SL: $${formatPrice(sl||0)}</span>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        async function openDeepScan(symbol) {
+            const backdrop = document.getElementById('modal-backdrop');
+            const modal = document.getElementById('deep-scan-modal');
+            const title = document.getElementById('ds-title');
+            const subtitle = document.getElementById('ds-subtitle');
+            const content = document.getElementById('ds-content');
+
+            // Reset & Show Modal
+            title.textContent = `Deep Scan: ${symbol}`;
+            subtitle.textContent = 'Fetching microstructure analysis...';
+            content.innerHTML = `
+                <div class="flex flex-col items-center justify-center py-12">
+                    <div class="w-12 h-12 border-4 border-sky-500/20 border-t-sky-500 rounded-full animate-spin mb-4"></div>
+                    <p class="text-sm font-bold text-slate-500 uppercase tracking-widest">Analyzing Liquidity...</p>
+                </div>`;
+            
+            backdrop.classList.remove('hidden');
+            modal.classList.remove('hidden');
+
+            try {
+                const res = await api(`/api/scan/single/${symbol}`);
+                if (res.ok && res.data) {
+                    const c = res.data;
+                    const sigColor = c.signal === 'LONG' ? 'text-emerald-400' : c.signal === 'SHORT' ? 'text-rose-400' : 'text-slate-400';
+                    
+                    content.innerHTML = `
+                        <div class="grid grid-cols-2 gap-4 mb-4">
+                            <div class="bg-white/5 rounded-2xl p-4">
+                                <div class="text-[10px] text-slate-500 uppercase font-bold mb-1">Signal</div>
+                                <div class="text-xl font-black ${sigColor}">${c.signal} (${c.confidence}%)</div>
+                            </div>
+                            <div class="bg-white/5 rounded-2xl p-4">
+                                <div class="text-[10px] text-slate-500 uppercase font-bold mb-1">Composite Score</div>
+                                <div class="text-xl font-black text-white">${parseFloat(c.composite_score||0).toFixed(1)}</div>
+                            </div>
+                        </div>
+                        <div class="bg-white/5 rounded-2xl p-4 mb-4">
+                            <div class="text-[10px] text-slate-500 uppercase font-bold mb-3">Why This Signal</div>
+                            <div class="space-y-2">${(c.reasons||[]).map(r => {
+                                const cls = r.includes('BLOCKED')||r.includes('Risky')?'text-amber-300':r.includes('Bearish')||r.includes('SHORT')?'text-rose-300':r.includes('Bullish')||r.includes('LONG')?'text-emerald-300':'text-slate-300';
+                                return '<div class="text-xs '+cls+'">• '+escapeHtml(r)+'</div>';
+                            }).join('')||'<div class="text-xs text-slate-500">No specific reasons</div>'}</div>
+                        </div>
+                        <div class="flex gap-3 mb-4">
+                            <div class="bg-white/5 rounded-xl p-3 flex-1 text-center"><div class="text-[9px] text-slate-500 mb-1">Entry</div><div class="text-white font-mono text-sm">$${formatPrice(c.entry||c.price)}</div></div>
+                            <div class="bg-emerald-500/10 rounded-xl p-3 flex-1 text-center border border-emerald-500/20"><div class="text-[9px] text-emerald-500 mb-1">TP</div><div class="text-white font-mono text-sm">$${formatPrice(c.tp)}</div></div>
+                            <div class="bg-rose-500/10 rounded-xl p-3 flex-1 text-center border border-rose-500/20"><div class="text-[9px] text-rose-500 mb-1">SL</div><div class="text-white font-mono text-sm">$${formatPrice(c.sl)}</div></div>
+                        </div>
+                        <div class="bg-white/5 rounded-xl p-4">
+                            <div class="text-[10px] text-slate-500 uppercase font-bold mb-2">Score Breakdown</div>
+                            ${(c.score_breakdown||[]).map(b => '<div class="text-xs text-slate-400 mb-1">'+escapeHtml(b)+'</div>').join('')||'<div class="text-xs text-slate-500">No breakdown</div>'}
+                        </div>`;
+                    subtitle.textContent = 'Analysis complete.';
+                    subtitle.textContent = 'Scan complete. High-precision data loaded.';
+                } else {
+                    content.innerHTML = `<div class="text-center py-8 text-rose-400 font-bold">Error: ${res.error || 'Scan failed'}</div>`;
+                    subtitle.textContent = 'Analysis aborted.';
+                }
+            } catch (e) {
+                content.innerHTML = `<div class="text-center py-8 text-rose-400 font-bold">Network error during deep scan.</div>`;
+            }
+        }
+
+        // ============================================
+        // MODAL CONTROLS
+        // ============================================
+        function openSettings() {
+            document.getElementById('modal-backdrop').classList.remove('hidden');
+            document.getElementById('settings-modal').classList.remove('hidden');
+        }
+
+        function closeModals() {
+            document.getElementById('modal-backdrop').classList.add('hidden');
+            document.getElementById('settings-modal').classList.add('hidden');
+            document.getElementById('deep-scan-modal').classList.add('hidden');
+        }
+
+        // ============================================
+        // SYSTEM ACTIONS
+        // ============================================
+        async function triggerSystemAction(endpoint, successMessage) {
+            try {
+                showToast('Executing system action...');
+                const res = await api(endpoint, { method: endpoint.includes('reset') || endpoint.includes('clear') ? 'POST' : 'GET' });
+                if (res.ok) {
+                    showToast(successMessage);
+                    // Refresh data if relevant
+                    if (endpoint.includes('refresh') || endpoint.includes('clear')) {
+                        setTimeout(loadDashboard, 1000);
+                    }
+                } else {
+                    showToast('Action failed: ' + (res.error || 'Unknown error'));
+                }
+            } catch (e) {
+                showToast('Network error during action.');
+            }
+        }
+
+        function loadSettings() {
+            // Minimal settings load for system features
+            const autoscan = localStorage.getItem('screener_autoscan') !== 'false';
+            if (!autoscan) pollManager.stop();
+            else pollManager.start();
+        }
+
+        // Close on backdrop click
+        document.getElementById('modal-backdrop').addEventListener('click', function(e) {
+            if (e.target === this) closeModals();
+        });
+    </script>
+</body>
+</html>

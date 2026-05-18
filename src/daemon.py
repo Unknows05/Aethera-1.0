@@ -1,0 +1,299 @@
+"""
+Aethera Daemon — Background autonomous process.
+Runs screening, management, and reflection cycles 24/7.
+Survives TUI close, recovers after reboot.
+"""
+import os
+import sys
+import json
+import signal
+import asyncio
+import logging
+import time
+from pathlib import Path
+from datetime import datetime
+from typing import Dict, Optional
+
+# Add project root to path
+SCRIPT_DIR = Path(__file__).parent
+sys.path.insert(0, str(SCRIPT_DIR))
+
+from src.config_loader import get_config
+from src.engine_v2 import ScreeningEngineV2
+from src.agents.scheduler import AgentScheduler
+from src.agents.health import HealthMonitor
+from src.agents.data_collector import DataCollector
+from src.agents.bull_agent import BullAgent
+from src.agents.bear_agent import BearAgent
+from src.agents.synthesizer import Synthesizer
+from src.agents.debate import DebateOrchestrator
+from src.agents.risk_gate import RiskGate
+
+logger = logging.getLogger(__name__)
+
+PID_FILE = "data/aethera.pid"
+STATE_FILE = "data/daemon_state.json"
+
+
+class AetheraDaemon:
+    """Main daemon process — runs autonomous trading cycles."""
+
+    def __init__(self, config: Dict = None, trade_enabled: bool = False):
+        self.config = config or get_config()
+        self.trade_enabled = trade_enabled
+        self.engine: Optional[ScreeningEngineV2] = None
+        self.scheduler: Optional[AgentScheduler] = None
+        self.health: Optional[HealthMonitor] = None
+        self.data_collector: Optional[DataCollector] = None
+        self._state: Dict = {}
+        self._shutdown = False
+
+    def load_state(self):
+        """Load previous daemon state from file."""
+        if Path(STATE_FILE).exists():
+            try:
+                with open(STATE_FILE) as f:
+                    self._state = json.load(f)
+                logger.info(f"[Daemon] State loaded: {self._state.get('last_screening', 'never')}")
+            except Exception as e:
+                logger.warning(f"[Daemon] State load failed: {e}")
+                self._state = {}
+        else:
+            self._state = {}
+
+    def save_state(self):
+        """Save current daemon state to file."""
+        try:
+            Path("data").mkdir(exist_ok=True)
+            with open(STATE_FILE, "w") as f:
+                json.dump(self._state, f, indent=2)
+        except Exception as e:
+            logger.error(f"[Daemon] State save failed: {e}")
+
+    def write_pid(self):
+        """Write PID file for process management."""
+        Path("data").mkdir(exist_ok=True)
+        Path(PID_FILE).write_text(str(os.getpid()))
+
+    def remove_pid(self):
+        """Remove PID file on shutdown."""
+        try:
+            Path(PID_FILE).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    async def start(self):
+        """Start the daemon — initialize all components and begin cycles."""
+        logger.info("[Daemon] Starting Aethera v1.5...")
+
+        # Load previous state
+        self.load_state()
+
+        # Initialize engine
+        self.engine = ScreeningEngineV2(self.config, cache_dir="data")
+        logger.info("[Daemon] Engine initialized")
+
+        # Initialize debate pipeline (Phase 3)
+        llm_config = self.config.get("llm", {})
+        llm_api_key = llm_config.get("api_key", "") or os.getenv("OPENROUTER_API_KEY", "")
+        llm_model = llm_config.get("model", "deepseek/deepseek-chat-v4:free")
+        llm_base_url = llm_config.get("base_url", "https://openrouter.ai/api/v1")
+
+        self.bull_agent = BullAgent(model=llm_model, base_url=llm_base_url, api_key=llm_api_key)
+        self.bear_agent = BearAgent(model=llm_model, base_url=llm_base_url, api_key=llm_api_key)
+        self.synthesizer = Synthesizer(model=llm_model, base_url=llm_base_url, api_key=llm_api_key)
+        self.debate_orchestrator = DebateOrchestrator(
+            bull_agent=self.bull_agent,
+            bear_agent=self.bear_agent,
+            synthesizer=self.synthesizer,
+        )
+        self.risk_gate = RiskGate(self.config.get("risk_gate", {}))
+        logger.info("[Daemon] Debate pipeline initialized")
+
+        # Initialize data collector
+        self.data_collector = DataCollector(api=self.engine.api)
+
+        # Initialize health monitor
+        self.health = HealthMonitor(
+            engine=self.engine,
+            telegram=self.engine.telegram,
+            state=self._state,
+        )
+
+        # Initialize scheduler
+        self.scheduler = AgentScheduler()
+
+        # Write PID
+        self.write_pid()
+
+        # Setup signal handlers
+        loop = asyncio.get_event_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, lambda: asyncio.create_task(self.shutdown()))
+
+        # Start scheduler
+        await self.scheduler.start(
+            screening_fn=self._screening_cycle,
+            management_fn=self._management_cycle,
+            reflection_fn=self._reflection_cycle,
+            health_fn=self._health_check,
+            screening_interval=self.config.get("screening_interval", 900),
+            management_interval=self.config.get("management_interval", 300),
+            reflection_interval=self.config.get("reflection_interval", 3600),
+            health_interval=60,
+        )
+
+        logger.info("[Daemon] All cycles started — running autonomously")
+
+        # Keep running until shutdown
+        while not self._shutdown:
+            await asyncio.sleep(1)
+
+    async def shutdown(self):
+        """Graceful shutdown — stop cycles, save state, close connections."""
+        if self._shutdown:
+            return
+        self._shutdown = True
+
+        logger.info("[Daemon] Shutting down...")
+
+        # Stop scheduler
+        if self.scheduler:
+            await self.scheduler.stop()
+
+        # Save state
+        self._state["last_shutdown"] = datetime.now().isoformat()
+        self.save_state()
+
+        # Close engine
+        if self.engine:
+            self.engine.close()
+
+        # Remove PID
+        self.remove_pid()
+
+        logger.info("[Daemon] Shutdown complete")
+
+    async def _screening_cycle(self):
+        """Run screening cycle — scan market, generate signals."""
+        try:
+            logger.info("[Daemon] Screening cycle started")
+            result = await self.engine.scan()
+            self._state["last_screening"] = datetime.now().isoformat()
+            self._state["screening_count"] = self._state.get("screening_count", 0) + 1
+
+            if result.get("ok"):
+                summary = result.get("summary", {})
+                logger.info(f"[Daemon] Screening done: {summary}")
+            else:
+                logger.warning(f"[Daemon] Screening failed: {result.get('error')}")
+
+            self.save_state()
+        except Exception as e:
+            logger.error(f"[Daemon] Screening cycle error: {e}")
+
+    async def _management_cycle(self):
+        """Run management cycle — check positions, make decisions."""
+        try:
+            if not self.trade_enabled:
+                return
+
+            logger.debug("[Daemon] Management cycle started")
+
+            # Get open positions
+            try:
+                positions = self.engine.position_manager.get_open_positions()
+            except Exception:
+                positions = []
+
+            if not positions:
+                return
+
+            # Fetch current prices
+            loop = asyncio.get_event_loop()
+            ticker_data = await loop.run_in_executor(None, self.engine.api.get_24h_ticker)
+            prices = {t["symbol"]: float(t["lastPrice"]) for t in ticker_data}
+
+            # Manage positions
+            regime = self.engine._get_current_market_regime()
+            actions = self.engine.position_manager.manage_all(prices, regime)
+
+            for action in actions:
+                logger.info(f"[Daemon] Position action: {action}")
+                # Execute via LLM management agent (Phase 3)
+                # For now, use deterministic rules
+
+            self._state["last_management"] = datetime.now().isoformat()
+            self._state["management_count"] = self._state.get("management_count", 0) + 1
+            self.save_state()
+
+        except Exception as e:
+            logger.error(f"[Daemon] Management cycle error: {e}")
+
+    async def _reflection_cycle(self):
+        """Run reflection cycle — learn, evolve, sync swarm."""
+        try:
+            logger.info("[Daemon] Reflection cycle started")
+
+            # Run learning loop
+            signals = self.engine.get_signals().get("data", [])
+            await self.engine._run_learning_loop(signals)
+
+            # Re-index vault
+            try:
+                self.engine.vault_indexer.index_all()
+            except Exception as e:
+                logger.debug(f"[Daemon] Vault re-index: {e}")
+
+            # Evolve thresholds (if enough data)
+            try:
+                await self.engine.run_threshold_evolution(auto_apply=False)
+            except Exception as e:
+                logger.debug(f"[Daemon] Threshold evolution: {e}")
+
+            self._state["last_reflection"] = datetime.now().isoformat()
+            self._state["reflection_count"] = self._state.get("reflection_count", 0) + 1
+            self.save_state()
+
+            logger.info("[Daemon] Reflection cycle done")
+        except Exception as e:
+            logger.error(f"[Daemon] Reflection cycle error: {e}")
+
+    async def _health_check(self):
+        """Run health check — monitor system health."""
+        try:
+            if self.health:
+                await self.health.check()
+        except Exception as e:
+            logger.error(f"[Daemon] Health check error: {e}")
+
+
+async def run_daemon(trade_enabled: bool = False):
+    """Entry point for daemon process."""
+    # Setup logging
+    Path("data").mkdir(exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        handlers=[
+            logging.FileHandler("data/daemon.log"),
+            logging.StreamHandler(sys.stdout),
+        ],
+    )
+
+    config = get_config()
+    daemon = AetheraDaemon(config=config, trade_enabled=trade_enabled)
+
+    try:
+        await daemon.start()
+    except KeyboardInterrupt:
+        await daemon.shutdown()
+    except Exception as e:
+        logger.error(f"[Daemon] Fatal error: {e}")
+        await daemon.shutdown()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    trade = "--trade" in sys.argv
+    asyncio.run(run_daemon(trade_enabled=trade))

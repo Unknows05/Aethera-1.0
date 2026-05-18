@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data — Coin Screener</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; margin: 0; padding: 0; box-sizing: border-box; }
+        body { background-color: #040608; color: #64748b; min-height: 100vh; }
+        .glass { background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .pos { color: #10b981; } .neg { color: #f43f5e; }
+        .bg-blob-1 { position: fixed; top: -10%; right: -10%; width: 600px; height: 600px; background: radial-gradient(circle, rgba(56, 189, 248, 0.04) 0%, transparent 70%); filter: blur(100px); z-index: 0; pointer-events: none; border-radius: 50%; }
+        .bg-blob-2 { position: fixed; bottom: -10%; left: -10%; width: 800px; height: 800px; background: radial-gradient(circle, rgba(139, 92, 246, 0.03) 0%, transparent 70%); filter: blur(120px); z-index: 0; pointer-events: none; border-radius: 50%; }
+        #toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%) translateY(12px); background: rgba(15,23,42,0.95); border: 1px solid rgba(255,255,255,0.08); color: #f8fafc; font-size: 12px; font-weight: 600; padding: 10px 24px; border-radius: 100px; opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s; z-index: 9999; }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    </style>
+</head>
+<body class="relative overflow-x-hidden">
+    <div class="bg-blob-1"></div><div class="bg-blob-2"></div><div id="toast"></div>
+
+    <div class="relative z-10 max-w-5xl mx-auto p-4 md:p-8 pb-24">
+        <header class="text-center py-10">
+            <h1 class="text-5xl font-black text-white tracking-tighter">Data</h1>
+            <p class="text-sm text-slate-600 mt-2">Database overview & signal history</p>
+            <a href="/" class="inline-block mt-4 text-xs text-slate-500 hover:text-white transition-colors">← Back to Screener</a>
+        </header>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6" id="stats-cards">
+            <div class="glass rounded-2xl p-4 text-center"><div class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">Total Signals</div><div class="text-white font-bold text-lg" id="stat-total">-</div></div>
+            <div class="glass rounded-2xl p-4 text-center"><div class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">Win Rate</div><div class="text-white font-bold text-lg" id="stat-wr">-</div></div>
+            <div class="glass rounded-2xl p-4 text-center"><div class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">Wins / Losses</div><div class="text-white font-bold text-lg" id="stat-wl">-</div></div>
+            <div class="glass rounded-2xl p-4 text-center"><div class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">Profit Factor</div><div class="text-white font-bold text-lg" id="stat-pf">-</div></div>
+        </div>
+
+        <!-- Daily Performance -->
+        <div class="glass rounded-3xl p-6 mb-6">
+            <h2 class="text-white font-bold text-sm mb-4 uppercase tracking-wider">Daily Performance (Last 7 Days)</h2>
+            <div class="overflow-x-auto"><table class="w-full text-xs" id="daily-table">
+                <thead><tr class="text-slate-600 uppercase tracking-wider border-b border-white/5"><th class="text-left py-3 font-bold">Date</th><th class="text-right py-3 font-bold">Signals</th><th class="text-right py-3 font-bold">Win Rate</th><th class="text-right py-3 font-bold">Wins</th><th class="text-right py-3 font-bold">Losses</th><th class="text-right py-3 font-bold">PnL %</th><th class="text-right py-3 font-bold">Gross Profit</th><th class="text-right py-3 font-bold">Gross Loss</th></tr></thead>
+                <tbody><tr><td colspan="8" class="text-center py-8 text-slate-600">Loading...</td></tr></tbody>
+            </table></div>
+        </div>
+
+        <!-- Recent Signals -->
+        <div class="glass rounded-3xl p-6 mb-6">
+            <h2 class="text-white font-bold text-sm mb-4 uppercase tracking-wider">Last 30 Closed Signals</h2>
+            <div class="overflow-x-auto"><table class="w-full text-xs" id="signals-table">
+                <thead><tr class="text-slate-600 uppercase tracking-wider border-b border-white/5"><th class="text-left py-3 font-bold">ID</th><th class="text-left py-3 font-bold">Symbol</th><th class="text-left py-3 font-bold">Signal</th><th class="text-left py-3 font-bold">Result</th><th class="text-right py-3 font-bold">Entry</th><th class="text-right py-3 font-bold">Exit</th><th class="text-right py-3 font-bold">PnL %</th><th class="text-left py-3 font-bold">Exit Reason</th><th class="text-left py-3 font-bold">Time</th></tr></thead>
+                <tbody><tr><td colspan="9" class="text-center py-8 text-slate-600">Loading...</td></tr></tbody>
+            </table></div>
+        </div>
+
+        <!-- ML Status -->
+        <div class="glass rounded-3xl p-6 mb-6" id="ml-card">
+            <h2 class="text-white font-bold text-sm mb-4 uppercase tracking-wider">ML Model Status</h2>
+            <div class="text-xs text-slate-600" id="ml-status">Loading...</div>
+        </div>
+
+        <!-- Server Info -->
+        <div class="glass rounded-3xl p-6">
+            <h2 class="text-white font-bold text-sm mb-4 uppercase tracking-wider">Server Info</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                <div class="glass rounded-xl p-4">
+                    <div class="text-slate-600 mb-1">Public IPv4</div>
+                    <div class="text-white font-mono" id="srv-ipv4">Detecting...</div>
+                </div>
+                <div class="glass rounded-xl p-4">
+                    <div class="text-slate-600 mb-1">Binance API</div>
+                    <div class="text-emerald-400 font-mono">fapi.binance.com</div>
+                </div>
+                <div class="glass rounded-xl p-4">
+                    <div class="text-slate-600 mb-1">Database</div>
+                    <div class="text-white font-mono text-xs">data/screener.db (SQLite)</div>
+                </div>
+            </div>
+            <div class="mt-4 p-3 rounded-xl bg-amber-500/5 border border-amber-500/10">
+                <p class="text-[11px] text-amber-400/70 leading-relaxed">
+                    <span class="font-bold">Binance IP Whitelist:</span> Add the IP above to your 
+                    <a href="https://www.binance.com/en/my/settings/api-management" target="_blank" class="text-white underline">Binance API settings</a> 
+                    under "Restrict access to trusted IPs only". Without this, your API key will only work if IP restrictions are disabled.
+                </p>
+            </div>
+        </div>
+    </div>
+
+<script>
+async function api(path) {
+    const r = await fetch('/api' + path);
+    return r.json().catch(() => ({}));
+}
+function toast(m) { const e = document.getElementById('toast'); e.textContent = m; e.classList.add('show'); setTimeout(() => e.classList.remove('show'), 2000); }
+
+async function loadAll() {
+    // DB stats
+    const stats = await api('/db/stats');
+    if (stats.ok && stats.stats) {
+        const s = stats.stats;
+        document.getElementById('stat-total').textContent = (s.wins + s.losses + (s.open||0)).toLocaleString();
+        document.getElementById('stat-wr').textContent = s.win_rate.toFixed(1) + '%';
+        document.getElementById('stat-wl').innerHTML = `<span class="pos">${s.wins}</span> / <span class="neg">${s.losses}</span>`;
+        document.getElementById('stat-pf').textContent = (s.profit_factor || 0).toFixed(2);
+    }
+
+    // Daily performance
+    const perf = await api('/daily-performance?days=7');
+    const dt = document.querySelector('#daily-table tbody');
+    if (perf.ok && perf.data && perf.data.length) {
+        dt.innerHTML = perf.data.map(d => {
+            const wr = d.total > 0 ? (d.wins/d.total*100).toFixed(1) : '-';
+            return `<tr class="border-b border-white/[0.02] hover:bg-white/[0.01]">
+                <td class="py-3 text-white">${d.scan_date || d.date || '-'}</td>
+                <td class="py-3 text-right text-white">${d.total || 0}</td>
+                <td class="py-3 text-right font-bold ${parseFloat(wr) >= 50 ? 'pos' : 'neg'}">${wr}%</td>
+                <td class="py-3 text-right pos">${d.wins || 0}</td>
+                <td class="py-3 text-right neg">${d.losses || 0}</td>
+                <td class="py-3 text-right font-bold ${(d.gross_profit - d.gross_loss) >= 0 ? 'pos' : 'neg'}">${d.win_rate ? d.win_rate.toFixed(1) + '%' : '-'}</td>
+                <td class="py-3 text-right pos">${(d.gross_profit || 0).toFixed(2)}</td>
+                <td class="py-3 text-right neg">${(d.gross_loss || 0).toFixed(2)}</td>
+            </tr>`;
+        }).join('');
+    } else dt.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-600">No data</td></tr>';
+
+    // Recent signals
+    const hist = await api('/signals/history?result=closed&limit=30');
+    const st = document.querySelector('#signals-table tbody');
+    if (hist.ok && hist.data && hist.data.length) {
+        st.innerHTML = hist.data.map(r => `<tr class="border-b border-white/[0.02] hover:bg-white/[0.01]">
+            <td class="py-3 text-slate-500">#${r.id}</td>
+            <td class="py-3 text-white font-medium">${r.symbol}</td>
+            <td class="py-3 font-bold ${r.signal==='LONG'?'pos':'neg'}">${r.signal}</td>
+            <td class="py-3 font-bold ${r.result==='WIN'?'pos':'neg'}">${r.result}</td>
+            <td class="py-3 text-right">$${(r.entry_price||0).toFixed(4)}</td>
+            <td class="py-3 text-right">${r.exit_price ? '$'+r.exit_price.toFixed(4) : '-'}</td>
+            <td class="py-3 text-right font-bold ${(r.pnl_pct||0)>=0?'pos':'neg'}">${(r.pnl_pct||0)>=0?'+':''}${(r.pnl_pct||0).toFixed(2)}%</td>
+            <td class="py-3 text-slate-500 text-[10px] uppercase">${r.exit_reason||'N/A'}</td>
+            <td class="py-3 text-slate-500">${(r.timestamp||'').substring(0,16)}</td>
+        </tr>`).join('');
+    } else st.innerHTML = '<tr><td colspan="9" class="text-center py-8 text-slate-600">No closed signals</td></tr>';
+
+    // ML Status
+    const ml = await api('/learning');
+    document.getElementById('ml-status').innerHTML = ml.ok && ml.model_status
+        ? `<div class="grid grid-cols-2 md:grid-cols-5 gap-3"><div class="glass rounded-xl p-3 text-center"><div class="text-[10px] text-slate-600 font-bold uppercase mb-1">Status</div><div class="text-emerald-400 font-bold text-sm">${ml.model_status.status||'?'}</div></div><div class="glass rounded-xl p-3 text-center"><div class="text-[10px] text-slate-600 font-bold uppercase mb-1">WR</div><div class="text-white font-bold text-sm">${(ml.model_status.wr_out_of_sample||0).toFixed(1)}%</div></div><div class="glass rounded-xl p-3 text-center"><div class="text-[10px] text-slate-600 font-bold uppercase mb-1">Samples</div><div class="text-white font-bold text-sm">${ml.model_status.samples||0}</div></div><div class="glass rounded-xl p-3 text-center"><div class="text-[10px] text-slate-600 font-bold uppercase mb-1">Threshold</div><div class="text-white font-bold text-sm">${(ml.model_status.threshold||0).toFixed(2)}</div></div><div class="glass rounded-xl p-3 text-center"><div class="text-[10px] text-slate-600 font-bold uppercase mb-1">Features</div><div class="text-white font-bold text-sm">${(ml.feature_importance?Object.keys(ml.feature_importance):[]).length||24}</div></div></div>`
+        : '<span class="text-slate-500">ML not ready</span>';
+    if (ml.ok && ml.top_features) {
+        document.getElementById('ml-status').innerHTML += `<div class="mt-3 text-[10px] text-slate-500">Top: ${ml.top_features}</div>`;
+    }
+
+    // Server IP
+    try {
+        const ip4 = await fetch('https://api.ipify.org?format=json').then(r => r.json()).catch(() => ({}));
+        document.getElementById('srv-ipv4').textContent = ip4.ip || 'Unavailable';
+    } catch(e) {
+        document.getElementById('srv-ipv4').textContent = 'Fetch failed';
+    }
+}
+
+loadAll();
+</script>
+</body>
+</html>

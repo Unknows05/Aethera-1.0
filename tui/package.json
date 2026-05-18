@@ -1,0 +1,27 @@
+{
+  "name": "aethera-tui",
+  "private": true,
+  "version": "1.5.0",
+  "type": "module",
+  "bin": {
+    "aethera-tui": "./dist/cli.js"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.tsx",
+    "build": "tsc && chmod +x dist/cli.js",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "ink": "^5.0.1",
+    "react": "^18.3.1",
+    "meow": "^13.2.0",
+    "ky": "^1.8.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@inkjs/ui": "^2.0.0",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.21.0",
+    "typescript": "~5.8.0"
+  }
+}
