@@ -106,10 +106,18 @@ fi
 # ── Python Dependencies ─────────────────────────────────
 
 echo -e "\n${CYAN}Installing Python dependencies...${NC}"
-export PIP_BREAK_SYSTEM_PACKAGES=1
-python3 -m pip install --quiet --upgrade pip
-python3 -m pip install --quiet -r requirements.txt 2>/dev/null || \
-python3 -m pip install --quiet click rich requests openai ccxt pyyaml httpx apscheduler pynacl 2>/dev/null
+
+# PEP 668 workaround: try --break-system-packages, then --user, then plain
+_pip_install() {
+    python3 -m pip install --quiet "$@" 2>/dev/null && return 0
+    python3 -m pip install --quiet --break-system-packages "$@" 2>/dev/null && return 0
+    python3 -m pip install --quiet --user "$@" 2>/dev/null && return 0
+    return 1
+}
+
+_pip_install --upgrade pip 2>/dev/null || true
+_pip_install -r requirements.txt || \
+_pip_install click rich requests openai ccxt pyyaml httpx apscheduler pynacl
 echo -e "${GREEN}✓ Python dependencies installed${NC}"
 
 # ── Build TUI ───────────────────────────────────────────
