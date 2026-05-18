@@ -52,6 +52,7 @@ export default function App({ baseUrl }: Props) {
   ])
   const [showInput, setShowInput] = useState(true)
   const [wsConnected, setWsConnected] = useState(false)
+  const [inputKey, setInputKey] = useState(0)
   const wsRef = useRef<WebSocket | null>(null)
   const pingTimer = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -198,7 +199,7 @@ export default function App({ baseUrl }: Props) {
 
   const onInputSubmit = (value: string) => {
     handleCommand(value)
-    setShowInput(true)
+    setInputKey(k => k + 1)
   }
 
   const mode = modeLabel(status.mode)
@@ -309,7 +310,9 @@ export default function App({ baseUrl }: Props) {
         <Box marginTop={1}>
           <Text color="green">❯ </Text>
           <TextInput
+            key={inputKey}
             onSubmit={onInputSubmit}
+            suggestions={COMMANDS}
             placeholder="Type /help for commands..."
           />
         </Box>

@@ -411,7 +411,28 @@ def init():
             start_new_session=True,
             cwd=str(SCRIPT_DIR),
         )
-        time.sleep(3)
+        
+        # Wait for API server to be ready
+        api_ok = False
+        for i in range(10):
+            time.sleep(1)
+            try:
+                import urllib.request
+                urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=2)
+                api_ok = True
+                break
+            except Exception:
+                pass
+        if not api_ok:
+            console.print("[red]API server failed to start within 10s[/red]")
+            if Path("data/api.log").exists():
+                log_lines = Path("data/api.log").read_text().split("\n")
+                console.print("[dim]Last API log entries:[/dim]")
+                for line in log_lines[-5:]:
+                    if line.strip():
+                        console.print(f"  [red]{line.strip()[:120]}[/red]")
+            api_proc.kill()
+            return
 
         # Launch TypeScript TUI
         tui_cmd = ["node", str(tui_dist)]
@@ -848,7 +869,16 @@ def start():
             break
         except Exception:
             if i == 9:
-                console.print("[yellow]API server slow to start — launching TUI anyway[/yellow]")
+                console.print("[red]API server failed to start within 10s[/red]")
+                if Path("data/api.log").exists():
+                    log_lines = Path("data/api.log").read_text().split("\n")
+                    console.print("[dim]Last API log entries:[/dim]")
+                    for line in log_lines[-5:]:
+                        if line.strip():
+                            console.print(f"  [red]{line.strip()[:120]}[/red]")
+                api_proc.kill()
+                pid_file.unlink(missing_ok=True)
+                return
 
     # Launch TypeScript TUI
     console.print("[cyan]Launching Aethera TUI...[/cyan]")
