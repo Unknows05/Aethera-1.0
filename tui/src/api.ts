@@ -1,5 +1,9 @@
 import ky from 'ky'
+import { createRequire } from 'module'
 import type { SystemStatus, SignalsResponse } from './types.js'
+
+const require = createRequire(import.meta.url)
+const _WebSocket: any = require('ws')
 
 const DEFAULT_BASE = 'http://localhost:8000'
 
@@ -60,10 +64,10 @@ export function connectWs(
   onMessage: (msg: WsMessage) => void,
   onOpen: () => void,
   onClose: () => void,
-): WebSocket {
-  const ws = new WebSocket(getWsUrl(baseUrl))
+): any {
+  const ws = new _WebSocket(getWsUrl(baseUrl))
   ws.onopen = () => onOpen()
-  ws.onmessage = (e) => {
+  ws.onmessage = (e: any) => {
     try {
       const msg = JSON.parse(e.data) as WsMessage
       onMessage(msg)
@@ -73,10 +77,10 @@ export function connectWs(
   return ws
 }
 
-export function wsSendScan(ws: WebSocket): void {
+export function wsSendScan(ws: any): void {
   ws.send(JSON.stringify({ type: 'scan' }))
 }
 
-export function wsPing(ws: WebSocket): void {
+export function wsPing(ws: any): void {
   ws.send(JSON.stringify({ type: 'ping' }))
 }
