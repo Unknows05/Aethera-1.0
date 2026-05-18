@@ -309,7 +309,7 @@ export default function App({ baseUrl }: Props) {
         <Box marginTop={1}>
           <Text color="green">❯ </Text>
           <TextInput
-            onChange={onInputSubmit}
+            onSubmit={onInputSubmit}
             placeholder="Type /help for commands..."
           />
         </Box>
