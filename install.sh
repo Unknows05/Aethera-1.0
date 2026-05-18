@@ -184,7 +184,13 @@ fi
 
 # Ask to run init
 echo -ne "${CYAN}Run 'aethera init' now? [Y/n]: ${NC}"
-read -r answer
+if [[ -t 0 ]]; then
+    read -r answer
+elif [[ -c /dev/tty ]]; then
+    read -r answer </dev/tty
+else
+    answer=""
+fi
 if [[ "$answer" =~ ^[Nn]$ ]]; then
     echo -e "${YELLOW}Run 'aethera init' when ready.${NC}"
 else
