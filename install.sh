@@ -195,5 +195,5 @@ if [[ "$answer" =~ ^[Nn]$ ]]; then
     echo -e "${YELLOW}Run 'aethera init' when ready.${NC}"
 else
     cd "$INSTALL_DIR"
-    exec python3 cli.py init
+    exec python3 cli.py init </dev/tty
 fi
