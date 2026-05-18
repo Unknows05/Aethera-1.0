@@ -74,6 +74,7 @@ export function connectWs(
     } catch { /* ignore parse errors */ }
   }
   ws.onclose = () => onClose()
+  ws.onerror = () => { /* suppress crash on connection failure */ }
   return ws
 }
 
