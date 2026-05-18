@@ -2,8 +2,7 @@
 
 **Autonomous AI crypto trading agent. Self-hosted. Self-learning. Swarm-intelligent.**
 
-> Upgraded from Coin-Screener v1.3 → Aethera v1.5  
-> Previous repo: [Aethera-1.0](https://github.com/Unknows05/Aethera-1.0)
+> Upgraded from Coin-Screener v1.3 → Aethera v1.5
 
 ---
 
@@ -23,10 +22,9 @@ Aethera is an autonomous trading agent that connects to your Binance Futures acc
 
 ```bash
 # Linux / macOS
-curl -fsSL https://raw.githubusercontent.com/Unknows05/Aethera/main/install.sh | bash
-
+curl -fsSL https://raw.githubusercontent.com/Unknows05/Aethera-1.0/main/install.sh | bash
 # Windows
-irm https://raw.githubusercontent.com/Unknows05/Aethera/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/Unknows05/Aethera-1.0/main/install.ps1 | iex
 ```
 
 ### Update from Aethera v1.0
