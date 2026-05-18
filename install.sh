@@ -43,14 +43,48 @@ if [ "$(echo "$PYTHON_VERSION 3.10" | awk '{print ($1 >= $2)}')" != "1" ]; then
 fi
 echo -e "${GREEN}✓ Python $PYTHON_VERSION${NC}"
 
-# Check Node.js for TUI (optional but recommended)
+# Check pip
+INSTALL_PIP=false
+if ! command -v pip3 &>/dev/null && ! python3 -m pip --version &>/dev/null; then
+    echo -e "${YELLOW}⚠ pip not found — attempting to install...${NC}"
+    if command -v apt-get &>/dev/null; then
+        sudo apt-get update -qq && sudo apt-get install -y -qq python3-pip
+        INSTALL_PIP=true
+    elif command -v yum &>/dev/null; then
+        sudo yum install -y -q python3-pip
+        INSTALL_PIP=true
+    else
+        echo -e "${RED}✗ pip not found. Please install python3-pip manually.${NC}"
+        exit 1
+    fi
+fi
+echo -e "${GREEN}✓ pip${NC}"
+
+# Check Node.js for TUI — auto-install if missing
+HAS_NODE=false
 if command -v node &>/dev/null; then
     NODE_VERSION=$(node -v | sed 's/v//')
     echo -e "${GREEN}✓ Node.js $NODE_VERSION (for TUI)${NC}"
     HAS_NODE=true
 else
-    echo -e "${YELLOW}⚠ Node.js not found — TUI will be built when needed${NC}"
-    HAS_NODE=false
+    echo -e "${YELLOW}⚠ Node.js not found — attempting to install...${NC}"
+    if command -v apt-get &>/dev/null; then
+        curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash - && sudo apt-get install -y -qq nodejs
+        if command -v node &>/dev/null; then
+            echo -e "${GREEN}✓ Node.js $(node -v | sed 's/v//') installed${NC}"
+            HAS_NODE=true
+        fi
+    elif command -v yum &>/dev/null; then
+        curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo -E bash - && sudo yum install -y -q nodejs
+        if command -v node &>/dev/null; then
+            echo -e "${GREEN}✓ Node.js $(node -v | sed 's/v//') installed${NC}"
+            HAS_NODE=true
+        fi
+    fi
+    if [ "$HAS_NODE" = false ]; then
+        echo -e "${YELLOW}⚠ Node.js could not be auto-installed. TUI will be skipped.${NC}"
+        echo -e "  Install manually: https://nodejs.org/"
+    fi
 fi
 
 # ── Install ─────────────────────────────────────────────
