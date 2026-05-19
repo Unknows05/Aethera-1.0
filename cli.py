@@ -175,6 +175,12 @@ def _require_env():
         return
 
 
+@click.group()
+@click.version_option(version="1.5.8")
+def cli():
+    """Aethera V1.5 — Autonomous crypto trading agent."""
+
+
 # ---- model ----
 
 @cli.command()
