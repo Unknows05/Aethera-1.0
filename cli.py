@@ -174,16 +174,6 @@ def _require_env():
         console.print("[red]Not configured. Run: [bold]aethera init[/bold][/red]")
         return
 
-    _env_apply()  # Load .env into os.environ before spawning daemon
-
-        # Launch TypeScript TUI
-        tui_cmd = ["node", str(tui_dist)]
-        try:
-            subprocess.run(tui_cmd, cwd=str(SCRIPT_DIR))
-        except KeyboardInterrupt:
-            console.print("\n[yellow]TUI exited. Stopping API server...[/yellow]")
-            api_proc.terminate()
-
 
 # ---- model ----
 
@@ -1762,6 +1752,8 @@ def start(trade):
     if not Path(".env").exists():
         console.print("[red]Not configured. Run: [bold]aethera init[/bold][/red]")
         return
+
+    _env_apply()  # Load .env into os.environ before spawning daemon
 
     pid_file = Path("data/aethera.pid")
     if pid_file.exists():
