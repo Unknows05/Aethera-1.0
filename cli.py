@@ -172,267 +172,9 @@ def _tier_label(bal):
 def _require_env():
     if not Path(".env").exists():
         console.print("[red]Not configured. Run: [bold]aethera init[/bold][/red]")
-        sys.exit(1)
+        return
 
-
-# ═══════════════════════════════════════════════════════════════
-# CLI GROUP
-# ═══════════════════════════════════════════════════════════════
-
-@click.group()
-@click.version_option(version="1.5.0", prog_name="Aethera")
-def cli():
-    """Aethera V1.5 — Autonomous crypto trading agent. AI-powered, self-learning, swarm-intelligent."""
-
-
-# =========================================================================
-# SETUP COMMANDS
-# =========================================================================
-
-@cli.command()
-def init():
-    """Full interactive setup wizard."""
-    console.print(Panel.fit("[bold cyan]Aethera v1.5 — Setup[/bold cyan]"))
-
-    # Step 0: Public IP
-    ip = _public_ip()
-    if ip:
-        console.print(f"\n[green]Your IP: {ip}[/green]")
-        console.print("[dim]Whitelist this IP in Binance API settings.[/dim]")
-    else:
-        console.print("\n[yellow]Cannot detect IP. Whitelist your server IP in Binance.[/yellow]")
-
-    # Step 1: Binance API
-    console.print("\n[bold]1. Binance API[/bold]")
-    console.print("[dim]Binance -> API Management -> [check] Enable Futures  [ ] Enable Withdrawals[/dim]")
-    while True:
-        api_key = click.prompt("API Key", default="", show_default=False, hide_input=True)
-        if api_key.strip():
-            break
-        console.print("[yellow]Required.[/yellow]")
-    while True:
-        api_secret = click.prompt("Secret Key", default="", show_default=False, hide_input=True)
-        if api_secret.strip():
-            break
-        console.print("[yellow]Required.[/yellow]")
-
-    _env_set("BINANCE_API_KEY", api_key)
-    _env_set("BINANCE_API_SECRET", api_secret)
-
-    bal = _balance(api_key, api_secret)
-    if bal is not None:
-        tier = _tier_label(bal)
-        console.print(f"[green]Balance: ${bal:.2f} — {tier}[/green]")
-    else:
-        console.print("[yellow]Could not verify balance.[/yellow]")
-        console.print("[dim]Check: IP whitelisted? API key has Futures enabled? Internet OK?[/dim]")
-        if not click.confirm("Continue with this API key anyway?", default=False):
-            console.print("[dim]You can re-run 'aethera init' later or update .env manually.[/dim]")
-            # Allow re-input
-            console.print("\n[bold]Re-enter Binance API?[/bold]")
-            if click.confirm("Try again?", default=True):
-                while True:
-                    api_key = click.prompt("API Key", default="", show_default=False, hide_input=True)
-                    if api_key.strip(): break
-                    console.print("[yellow]Required.[/yellow]")
-                while True:
-                    api_secret = click.prompt("Secret Key", default="", show_default=False, hide_input=True)
-                    if api_secret.strip(): break
-                    console.print("[yellow]Required.[/yellow]")
-                _env_set("BINANCE_API_KEY", api_key)
-                _env_set("BINANCE_API_SECRET", api_secret)
-                bal = _balance(api_key, api_secret)
-                if bal is not None:
-                    console.print(f"[green]Balance: ${bal:.2f} — {_tier_label(bal)}[/green]")
-                else:
-                    console.print("[yellow]Still cannot verify. You can fix this later.[/yellow]")
-        else:
-            console.print("[dim]OK, continuing with unverified API. Run 'aethera status' later to check.[/dim]")
-
-    # Step 2: LLM (mandatory — no skip)
-    console.print("\n[bold]2. LLM Model (required)[/bold]")
-    console.print("[dim]Aethera uses LLM as strategist. You need an API key.[/dim]")
-    console.print("[dim]Get free key: openrouter.ai/keys[/dim]")
-
-    prov = click.prompt("\n  Provider", type=click.Choice(["openrouter", "openai", "groq", "ollama"]),
-                        default="openrouter")
-    _env_set("LLM_PROVIDER", prov)
-
-    # Fetch models FIRST — before asking API key
-    if prov in ("openrouter", "openai", "groq"):
-        console.print("\n  [dim]Fetching available models...[/dim]")
-        models = _fetch_openrouter_models()
-        if models:
-            console.print(_model_table(models))
-            console.print("  [dim]Pick by number or type model ID[/dim]")
-            while True:
-                choice = click.prompt("  Model", default="1").strip()
-                if choice:
-                    break
-                console.print("  [yellow]Required. Pick a model from the list.[/yellow]")
-            try:
-                idx = int(choice) - 1
-                if 0 <= idx < len(models):
-                    mdl = models[idx][0]
-                else:
-                    console.print(f"  [yellow]#{choice} not in list. Using #1.[/yellow]")
-                    mdl = models[0][0]
-            except ValueError:
-                matched = [m for m in models if m[0] == choice]
-                if matched:
-                    mdl = matched[0][0]
-                else:
-                    console.print(f"  [yellow]'{choice}' not found. Using #1.[/yellow]")
-                    mdl = models[0][0]
-        else:
-            console.print("  [yellow]Cannot fetch models. Enter model ID manually.[/yellow]")
-            while True:
-                mdl = click.prompt("  Model ID", default="google/gemini-2.5-flash-lite:free").strip()
-                if mdl:
-                    break
-
-        _env_set("LLM_MODEL", mdl)
-        console.print(f"  [green]Model: {mdl}[/green]")
-
-        # NOW ask for API key
-        console.print(f"\n  [dim]API key needed for {mdl}. Get one at openrouter.ai/keys[/dim]")
-        while True:
-            llm_key = click.prompt("  API Key", default="", show_default=False, hide_input=True)
-            if llm_key.strip():
-                break
-            console.print("  [yellow]API key is required. Cannot run without LLM.[/yellow]")
-
-        if prov == "openrouter":
-            _env_set("OPENROUTER_API_KEY", llm_key)
-        else:
-            _env_set("LLM_API_KEY", llm_key)
-
-        # Test connection
-        console.print("  [dim]Testing...[/dim]")
-        try:
-            from openai import OpenAI
-            base = "https://openrouter.ai/api/v1" if prov == "openrouter" else \
-                   "https://api.openai.com/v1" if prov == "openai" else \
-                   "https://api.groq.com/openai/v1"
-            c = OpenAI(base_url=base, api_key=llm_key, timeout=10)
-            r = c.chat.completions.create(model=mdl, messages=[{"role": "user", "content": "OK"}], max_tokens=2)
-            if r.choices:
-                console.print("  [green]Connection OK[/green]")
-        except Exception as e:
-            console.print(f"  [yellow]Test failed: {e}[/yellow]")
-
-    elif prov == "ollama":
-        console.print("\n  [dim]Local models via Ollama. Make sure Ollama is running.[/dim]")
-        while True:
-            mdl = click.prompt("  Model name (e.g. qwen2.5:3b)", default="qwen2.5:3b").strip()
-            if mdl:
-                break
-        _env_set("LLM_MODEL", mdl)
-        _env_set("LLM_BASE_URL", click.prompt("  Ollama URL", default="http://localhost:11434/v1"))
-        console.print(f"  [green]Model: {mdl} (local)[/green]")
-        llm_key = ""
-
-    # Set base URLs
-    if prov == "openai":
-        _env_set("LLM_BASE_URL", "https://api.openai.com/v1")
-    elif prov == "groq":
-        _env_set("LLM_BASE_URL", "https://api.groq.com/openai/v1")
-    else:
-        _env_set("LLM_BASE_URL", "https://openrouter.ai/api/v1")
-
-    if prov == "ollama":
-        _env_set("LLM_BASE_URL", click.prompt("Ollama URL", default="http://localhost:11434/v1"))
-        _env_set("LLM_MODEL", click.prompt("Model name", default="qwen2.5:3b"))
-
-    # Step 4: Daily Target
-    console.print("\n[bold]4. Daily Target[/bold]")
-    tgt = click.prompt("Target % per day", type=float, default=15.0)
-    if tgt > 50:
-        console.print("[bold yellow]\u26a0 Target >50% is very aggressive. LLM will adapt.[/bold yellow]")
-    _env_set("DAILY_TARGET_PCT", str(tgt))
-    max_tr = click.prompt("Max trades per day", type=int, default=3)
-    risk_tr = click.prompt("Risk % per trade", type=float, default=5.0)
-    _env_set("MAX_TRADES", str(max_tr))
-    _env_set("RISK_PER_TRADE", str(risk_tr))
-
-    # Step 5: Telegram
-    console.print("\n[bold]5. Telegram (optional)[/bold]")
-    tg_bot = click.prompt("Bot Token", default="", show_default=False)
-    if tg_bot.strip():
-        _env_set("TELEGRAM_BOT_TOKEN", tg_bot)
-        console.print("[green]Telegram configured.[/green]")
-    else:
-        console.print("[dim]Skipped.[/dim]")
-
-    # Step 6: Identity
-    from src.identity import AgentIdentity
-    ident = AgentIdentity.generate()
-    Path("data").mkdir(exist_ok=True)
-    _env_set("AGENT_ID", ident.agent_id)
-
-    console.print(f"\n[green]Identity generated: [bold cyan]{ident.agent_id}[/bold cyan][/green]")
-
-    # Summary
-    env = _env_load()
-    console.print(Panel.fit(
-        f"[bold green]Ready![/bold green]\n\n"
-        f"Agent:  [cyan]{ident.agent_id}[/cyan]\n"
-        f"Target: [yellow]{tgt}%[/yellow]/day | Max trades: {max_tr} | Risk: {risk_tr}%\n"
-        f"Model:  [cyan]{env.get('LLM_MODEL', '?')}[/cyan]\n"
-        f"Provider: {prov}\n"
-        f"Tier:   [bold]{_tier_label(bal)}[/bold]"
-    ))
-
-    # Ask to start now
-    if click.confirm("\nStart Aethera now?", default=True):
-        console.print("[cyan]Launching Aethera TUI...[/cyan]")
-        # Build TUI if needed
-        tui_dist = Path("tui/dist/cli.js")
-        if not tui_dist.exists():
-            console.print("[dim]Building TypeScript TUI...[/dim]")
-            subprocess.run(
-                ["npm", "install"],
-                cwd=str(SCRIPT_DIR / "tui"),
-                capture_output=True,
-            )
-            subprocess.run(
-                ["npm", "run", "build"],
-                cwd=str(SCRIPT_DIR / "tui"),
-                capture_output=True,
-            )
-
-        # Start API server in background
-        console.print("[dim]Starting API server...[/dim]")
-        api_cmd = [sys.executable, str(SCRIPT_DIR / "api.py")]
-        api_proc = subprocess.Popen(
-            api_cmd,
-            stdout=open("data/api.log", "a"),
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-            cwd=str(SCRIPT_DIR),
-        )
-        
-        # Wait for API server to be ready
-        api_ok = False
-        for i in range(10):
-            time.sleep(1)
-            try:
-                import urllib.request
-                urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=2)
-                api_ok = True
-                break
-            except Exception:
-                pass
-        if not api_ok:
-            console.print("[red]API server failed to start within 10s[/red]")
-            if Path("data/api.log").exists():
-                log_lines = Path("data/api.log").read_text().split("\n")
-                console.print("[dim]Last API log entries:[/dim]")
-                for line in log_lines[-5:]:
-                    if line.strip():
-                        console.print(f"  [red]{line.strip()[:120]}[/red]")
-            api_proc.kill()
-            return
+    _env_apply()  # Load .env into os.environ before spawning daemon
 
         # Launch TypeScript TUI
         tui_cmd = ["node", str(tui_dist)]
@@ -1279,6 +1021,153 @@ def log(search, limit):
                 reasons[:60],
             )
         console.print(table)
+    except Exception as e:
+        console.print(f"[yellow]Error: {e}[/yellow]")
+
+
+# =========================================================================
+# VAULT COMMANDS
+# =========================================================================
+
+@cli.group()
+def vault():
+    """Knowledge vault management."""
+
+
+@vault.command()
+@click.argument("query")
+@click.option("--limit", default=10, help="Max results")
+def search(query, limit):
+    """FTS5 full-text search across vault files."""
+    try:
+        from src.vault.indexer import VaultIndexer
+        from src.vault.search import VaultSearch
+
+        indexer = VaultIndexer(vault_dir="vault")
+        search_engine = VaultSearch(indexer=indexer)
+
+        results = search_engine.search(query, limit=limit)
+        if not results:
+            console.print(f"[dim]No results for '[bold]{query}[/bold]'[/dim]")
+            return
+
+        console.print(f"[bold]{len(results)} results[/bold] for '[cyan]{query}[/cyan]'")
+        for r in results:
+            title = r.get("title", r.get("path", "Unknown"))
+            snippet = r.get("snippet", "")
+            snippet = re.sub(r"<[^>]+>", "", snippet) if "snippet" in r else ""
+            console.print(f"  [cyan]{title}[/cyan]")
+            if snippet:
+                console.print(f"  [dim]{snippet[:120]}[/dim]")
+        console.print("")
+    except Exception as e:
+        console.print(f"[yellow]Error: {e}[/yellow]")
+
+
+@vault.command()
+@click.option("--folder", default=None, help="Filter: skills, lessons, memory, strategies")
+def list(folder):
+    """List vault files with stats."""
+    try:
+        from src.vault.indexer import VaultIndexer
+
+        indexer = VaultIndexer(vault_dir="vault")
+        stats = indexer.get_stats()
+
+        console.print(Panel.fit("[bold cyan]Vault Overview[/bold cyan]"))
+        console.print(f"  Documents: {stats.get('documents', 0)}")
+        console.print(f"  Wikilinks: {stats.get('links', 0)}")
+        console.print(f"  Folders:   {stats.get('folders', 0)}")
+        console.print(f"  Last index: {stats.get('last_indexed', 'never')}")
+        console.print("")
+
+        if stats.get("documents", 0) == 0:
+            console.print("[dim]Vault is empty. Skills and lessons auto-create as you trade.[/dim]")
+            return
+
+        # List files by folder
+        folders = ["skills", "lessons", "memory", "strategies"]
+        for f in folders:
+            if folder and folder != f:
+                continue
+            fpath = Path(f"vault/{f}")
+            if fpath.exists():
+                files = list(fpath.glob("*.md"))
+                if files:
+                    console.print(f"  [bold]{f}/[/bold] ({len(files)} files)")
+                    for mf in sorted(files)[:10]:
+                        size = mf.stat().st_size
+                        console.print(f"    {mf.name} [dim]({size}B)[/dim]")
+    except Exception as e:
+        console.print(f"[yellow]Error: {e}[/yellow]")
+
+
+@vault.command()
+def backup():
+    """Backup vault to tar.gz (data/vault-backups/)."""
+    try:
+        from src.vault.backup import VaultBackup
+
+        vault_backup = VaultBackup(vault_dir="vault")
+        filename = vault_backup.backup()
+
+        if filename:
+            console.print(f"[green]Backup created: [bold]{filename}[/bold][/green]")
+            console.print(f"  Location: [dim]data/vault-backups/{filename}[/dim]")
+        else:
+            console.print("[red]Backup failed.[/red]")
+    except Exception as e:
+        console.print(f"[yellow]Error: {e}[/yellow]")
+
+
+@vault.command()
+@click.argument("backup_file")
+def restore(backup_file):
+    """Restore vault from a backup tar.gz file."""
+    try:
+        from src.vault.backup import VaultBackup
+
+        vault_backup = VaultBackup(vault_dir="vault")
+        ok = vault_backup.restore(backup_file)
+
+        if ok:
+            console.print(f"[green]Vault restored from [bold]{backup_file}[/bold][/green]")
+            # Re-index after restore
+            try:
+                from src.vault.indexer import VaultIndexer
+                indexer = VaultIndexer(vault_dir="vault")
+                indexer.index_all()
+                console.print("[green]Vault re-indexed.[/green]")
+            except Exception:
+                pass
+        else:
+            console.print(f"[red]Restore failed. File not found: {backup_file}[/red]")
+            console.print("[dim]Use 'aethera vault backup' to list available backups.[/dim]")
+    except Exception as e:
+        console.print(f"[yellow]Error: {e}[/yellow]")
+
+
+@vault.command()
+@click.option("--keep", default=5, help="Number of backups to keep")
+def cleanup(keep):
+    """Remove old vault backups."""
+    try:
+        from src.vault.backup import VaultBackup
+
+        vault_backup = VaultBackup(vault_dir="vault")
+        backups = vault_backup.list_backups()
+
+        if not backups:
+            console.print("[dim]No backups to clean up.[/dim]")
+            return
+
+        removed = vault_backup.cleanup(keep=keep)
+        console.print(f"[green]Removed {removed} old backups[/green] (keeping {min(keep, len(backups))})")
+
+        # Show remaining
+        remaining = vault_backup.list_backups()
+        for b in remaining:
+            console.print(f"  [dim]{b['filename']} ({b['size_mb']} MB)[/dim]")
     except Exception as e:
         console.print(f"[yellow]Error: {e}[/yellow]")
 

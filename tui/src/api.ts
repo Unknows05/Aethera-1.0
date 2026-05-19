@@ -54,7 +54,7 @@ export function getWsUrl(baseUrl: string): string {
 }
 
 export interface WsMessage {
-  type: 'init' | 'scan_complete' | 'pong' | 'signal' | 'status'
+  type: 'init' | 'scan_complete' | 'pong' | 'signal' | 'status' | 'trade' | 'alert' | 'debate'
   data: Record<string, unknown>
   timestamp?: string
 }

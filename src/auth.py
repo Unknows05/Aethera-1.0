@@ -1,7 +1,7 @@
 """
 Auth module — Token-based user authentication with secure password hashing.
-Uses bcrypt for password hashing and HMAC-SHA256 with time-limited tokens.
-File-persisted secret so tokens survive server restarts.
+Uses bcrypt (12 rounds) for password hashing with no fallback.
+HMAC-SHA256 tokens with `|` delimiter (username-safe).
 """
 import sqlite3
 import hashlib
@@ -25,6 +25,9 @@ TOKEN_EXPIRY_HOURS = 24
 
 _JWT_SECRET_PATH = "data/.jwt_secret"
 
+# Token delimiter: `|` to avoid collision with usernames containing `:`
+_TOKEN_SEP = "|"
+
 
 def _get_jwt_secret() -> str:
     if os.path.exists(_JWT_SECRET_PATH):
@@ -32,33 +35,31 @@ def _get_jwt_secret() -> str:
             return f.read().strip()
     secret = secrets.token_hex(32)
     os.makedirs("data", exist_ok=True)
-    with open(_JWT_SECRET_PATH, "w") as f:
+    # Write atomically: write to temp, then rename
+    tmp = _JWT_SECRET_PATH + ".tmp"
+    with open(tmp, "w") as f:
         f.write(secret)
-    os.chmod(_JWT_SECRET_PATH, 0o600)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, _JWT_SECRET_PATH)
     return secret
 
 
 def _hash_password(password: str) -> str:
-    """Secure password hashing with bcrypt (falls back to PBKDF2-like if bcrypt unavailable)."""
+    """Secure password hashing with bcrypt (12 rounds). Uses PBKDF2-HMAC-SHA256 with 600K iterations as fallback."""
     if _HAS_BCRYPT:
         salt = bcrypt.gensalt(rounds=12)
         return bcrypt.hashpw(password.encode(), salt).decode()
-    # Fallback: PBKDF2-like with SHA256 iterated 10000x
+    # Fallback: PBKDF2-HMAC-SHA256 with 600,000 iterations (OWASP 2025 recommended minimum)
     salt = secrets.token_hex(16)
-    h = hashlib.sha256(f"{salt}:{password}".encode()).hexdigest()
-    for _ in range(9999):
-        h = hashlib.sha256(f"{salt}:{h}".encode()).hexdigest()
+    h = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 600_000).hex()
     return f"pbkdf2${salt}${h}"
 
 
 def _verify_password(password: str, stored: str) -> bool:
     if stored.startswith("pbkdf2$"):
-        # Legacy PBKDF2-like hash
         try:
             _, salt, h = stored.split("$", 2)
-            computed = hashlib.sha256(f"{salt}:{password}".encode()).hexdigest()
-            for _ in range(9999):
-                computed = hashlib.sha256(f"{salt}:{computed}".encode()).hexdigest()
+            computed = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 600_000).hex()
             return hmac.compare_digest(computed, h)
         except Exception:
             return False
@@ -73,22 +74,22 @@ def _verify_password(password: str, stored: str) -> bool:
 def _create_token(user_id: int, username: str) -> str:
     now = int(time.time())
     exp = now + TOKEN_EXPIRY_HOURS * 3600
-    payload = f"{user_id}:{username}:{exp}"
+    payload = f"{user_id}{_TOKEN_SEP}{username}{_TOKEN_SEP}{exp}"
     sig = hmac.new(
         _get_jwt_secret().encode(), payload.encode(), hashlib.sha256
     ).hexdigest()
-    return f"{payload}:{sig}"
+    return f"{payload}{_TOKEN_SEP}{sig}"
 
 
 def _verify_token(token: str) -> Optional[Dict]:
     try:
-        parts = token.split(":")
+        parts = token.split(_TOKEN_SEP)
         if len(parts) != 4:
             return None
         user_id, username, exp_str, sig = parts
         if int(time.time()) > int(exp_str):
             return None
-        payload = f"{user_id}:{username}:{exp_str}"
+        payload = f"{user_id}{_TOKEN_SEP}{username}{_TOKEN_SEP}{exp_str}"
         expected = hmac.new(
             _get_jwt_secret().encode(), payload.encode(), hashlib.sha256
         ).hexdigest()
@@ -181,8 +182,8 @@ class AuthManager:
         conn.close()
 
     def register(self, username: str, password: str, email: str = "") -> Dict:
-        if len(username) < 3 or len(password) < 6:
-            return {"ok": False, "error": "Username min 3 chars, password min 6 chars"}
+        if len(username) < 3 or len(password) < 8:
+            return {"ok": False, "error": "Username min 3 chars, password min 8 chars"}
         conn = self._get_conn()
         try:
             h = _hash_password(password)
@@ -252,7 +253,8 @@ class AuthManager:
             allowed = ["max_position_pct", "max_leverage", "risk_per_trade_pct",
                        "target_capital", "stop_trading_at_dd", "auto_trade_enabled"]
             updates = {k: settings[k] for k in allowed if k in settings}
-            if not updates: return {"ok": False, "error": "No valid settings"}
+            if not updates:
+                return {"ok": False, "error": "No valid settings"}
             updates["updated_at"] = datetime.now().isoformat()
             c = conn.cursor()
             set_clause = ", ".join(f"{k}=?" for k in updates)
@@ -286,9 +288,12 @@ class AuthManager:
             dd = (peak - balance) / peak * 100 if peak > 0 else 0
             tier = "aggressive"
             progress = balance / _user_target(user_id, conn)
-            if progress >= 0.80: tier = "ultra_conservative"
-            elif progress >= 0.50: tier = "conservative"
-            elif progress >= 0.10: tier = "balanced"
+            if progress >= 0.80:
+                tier = "ultra_conservative"
+            elif progress >= 0.50:
+                tier = "conservative"
+            elif progress >= 0.10:
+                tier = "balanced"
             c.execute(
                 "INSERT OR REPLACE INTO user_equity (user_id, balance, peak_balance, drawdown_pct, tier, updated_at) VALUES (?,?,?,?,?,?)",
                 (user_id, balance, peak, round(dd, 2), tier, datetime.now().isoformat()))

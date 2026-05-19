@@ -554,17 +554,24 @@ class ScreeningEngineV2:
                         "drawdown_pct": self.risk_manager.get_drawdown_pct() if hasattr(self.risk_manager, 'get_drawdown_pct') else 0,
                         "loss_streak": self.risk_manager.get_loss_streak() if hasattr(self.risk_manager, 'get_loss_streak') else 0,
                         "daily_trades": self.risk_manager.get_daily_trade_count() if hasattr(self.risk_manager, 'get_daily_trade_count') else 0,
+                        "circuit_breaker_resume": self._circuit_breaker_resume if hasattr(self, '_circuit_breaker_resume') else None,
+                        "correlation_exposure": getattr(self.risk_manager, 'current_drawdown', 0) / 100 if hasattr(self.risk_manager, 'current_drawdown') else 0,
                     }
                     gate_result = self.risk_gate.check(signal, portfolio_state, regime_type)
                     signal["risk_gate"] = gate_result
 
-                    if not gate_result.get("allowed") and not gate_result.get("soft_blocked"):
-                        signal["signal"] = "WAIT"
-                        signal["risk_gate_blocked"] = True
-                        signal["risk_gate_reason"] = gate_result.get("reason")
-                    elif gate_result.get("soft_blocked"):
-                        signal["risk_gate_soft_blocked"] = True
-                        signal["risk_gate_override_available"] = gate_result.get("override_available", False)
+                    if not gate_result.get("allowed"):
+                        # Both hard and soft blocks prevent trading
+                        # Soft blocks CAN be overridden via LLM override mechanism
+                        if gate_result.get("soft_blocked") and gate_result.get("override_available"):
+                            signal["risk_gate_soft_blocked"] = True
+                            signal["risk_gate_override_available"] = True
+                            # Signal stays as-is but is flagged for review
+                            # The override mechanism allows LLM to bypass with written reason
+                        else:
+                            signal["signal"] = "WAIT"
+                            signal["risk_gate_blocked"] = True
+                            signal["risk_gate_reason"] = gate_result.get("reason")
 
                 except Exception as e:
                     logger.debug(f"[EngineV2] Risk gate failed for {symbol}: {e}")

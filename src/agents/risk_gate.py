@@ -4,7 +4,7 @@ Deterministic safety layer that no agent can bypass.
 """
 import logging
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -18,6 +18,16 @@ class RiskGate:
         self._overrides: List[Dict] = []
         self._override_count_today = 0
         self._last_override_date = datetime.now().strftime("%Y-%m-%d")
+
+    def _set_circuit_breaker(self, portfolio: Dict):
+        """Set circuit breaker pause if loss streak threshold reached."""
+        loss_streak = portfolio.get("loss_streak", 0)
+        max_streak = self.config.get("circuit_breaker_losses", 3)
+        if loss_streak >= max_streak and not portfolio.get("circuit_breaker_resume"):
+            pause_hours = self.config.get("circuit_breaker_pause_hours", 4)
+            resume_time = (datetime.now() + timedelta(hours=pause_hours)).isoformat()
+            portfolio["circuit_breaker_resume"] = resume_time
+            logger.info(f"[RiskGate] Circuit breaker set: pause until {resume_time}")
 
     def check(self, signal: Dict, portfolio: Dict, regime: str = "UNKNOWN") -> Dict:
         """Run full risk check. Returns {allowed, reason, overrides}."""
@@ -36,6 +46,7 @@ class RiskGate:
             result["risk_level"] = soft_result.get("risk_level", "medium")
             result["soft_blocked"] = True
             result["override_available"] = True
+            result["issues"] = soft_result.get("issues", [])
 
         return result
 

@@ -18,6 +18,22 @@ from typing import Dict, Optional
 SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
+# Load .env if not already loaded
+_env_path = SCRIPT_DIR.parent / ".env"
+if _env_path.exists():
+    try:
+        with open(_env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and "=" in line and not line.startswith("#"):
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip("\"'")
+                    if k not in os.environ:
+                        os.environ[k] = v
+    except Exception:
+        pass
+
 from src.config_loader import get_config
 from src.engine_v2 import ScreeningEngineV2
 from src.agents.scheduler import AgentScheduler
@@ -28,6 +44,9 @@ from src.agents.bear_agent import BearAgent
 from src.agents.synthesizer import Synthesizer
 from src.agents.debate import DebateOrchestrator
 from src.agents.risk_gate import RiskGate
+from src.agents.screening_agent import ScreeningAgent
+from src.agents.management_agent import ManagementAgent
+from src.agents.reflection import ReflectionAgent
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +64,9 @@ class AetheraDaemon:
         self.scheduler: Optional[AgentScheduler] = None
         self.health: Optional[HealthMonitor] = None
         self.data_collector: Optional[DataCollector] = None
+        self.screening_agent: Optional[ScreeningAgent] = None
+        self.management_agent: Optional[ManagementAgent] = None
+        self.reflection_agent: Optional[ReflectionAgent] = None
         self._state: Dict = {}
         self._shutdown = False
 
@@ -109,6 +131,21 @@ class AetheraDaemon:
         )
         self.risk_gate = RiskGate(self.config.get("risk_gate", {}))
         logger.info("[Daemon] Debate pipeline initialized")
+
+        # Initialize screening agent (Phase 2)
+        self.screening_agent = ScreeningAgent(
+            model=llm_model, base_url=llm_base_url, api_key=llm_api_key)
+        logger.info("[Daemon] Screening agent initialized")
+
+        # Initialize management agent (Phase 2)
+        self.management_agent = ManagementAgent(
+            model=llm_model, base_url=llm_base_url, api_key=llm_api_key)
+        logger.info("[Daemon] Management agent initialized")
+
+        # Initialize reflection agent (Phase 2)
+        self.reflection_agent = ReflectionAgent(
+            model=llm_model, base_url=llm_base_url, api_key=llm_api_key)
+        logger.info("[Daemon] Reflection agent initialized")
 
         # Initialize data collector
         self.data_collector = DataCollector(api=self.engine.api)
@@ -178,7 +215,27 @@ class AetheraDaemon:
         """Run screening cycle — scan market, generate signals."""
         try:
             logger.info("[Daemon] Screening cycle started")
+
+            # Run engine scan (existing path)
             result = await self.engine.scan()
+
+            # Run screening agent for additional LLM-guided selection
+            if self.screening_agent and self.screening_agent.is_ready():
+                try:
+                    regime_data = self.engine._market_regime_data
+                    agent_result = await self.screening_agent.run_cycle(
+                        engine=self.engine,
+                        data_collector=self.data_collector,
+                        debate_orchestrator=self.debate_orchestrator,
+                        risk_gate=self.risk_gate,
+                        vault_search=self.engine.vault_search if hasattr(self.engine, 'vault_search') else None,
+                        vault_lessons=self.engine.vault_lessons if hasattr(self.engine, 'vault_lessons') else None,
+                        market_regime_data=regime_data,
+                    )
+                    logger.info(f"[Daemon] Screening agent: {agent_result.get('summary', {})}")
+                except Exception as e:
+                    logger.debug(f"[Daemon] Screening agent error: {e}")
+
             self._state["last_screening"] = datetime.now().isoformat()
             self._state["screening_count"] = self._state.get("screening_count", 0) + 1
 
@@ -214,14 +271,28 @@ class AetheraDaemon:
             ticker_data = await loop.run_in_executor(None, self.engine.api.get_24h_ticker)
             prices = {t["symbol"]: float(t["lastPrice"]) for t in ticker_data}
 
-            # Manage positions
+            # Manage positions — deterministic rules
             regime = self.engine._get_current_market_regime()
-            actions = self.engine.position_manager.manage_all(prices, regime)
+            actions_det = self.engine.position_manager.manage_all(prices, regime)
 
-            for action in actions:
+            for action in actions_det:
                 logger.info(f"[Daemon] Position action: {action}")
-                # Execute via LLM management agent (Phase 3)
-                # For now, use deterministic rules
+
+            # Management agent — LLM-guided decisions
+            if self.management_agent and self.management_agent.is_ready():
+                try:
+                    decisions = await self.management_agent.manage(
+                        positions=positions,
+                        prices=prices,
+                        regime=regime,
+                        engine=self.engine,
+                        vault_search=self.engine.vault_search if hasattr(self.engine, 'vault_search') else None,
+                    )
+                    for d in decisions:
+                        if d["action"] != "STAY":
+                            logger.info(f"[Daemon] Management: {d['symbol']} → {d['action']} ({d['reason']})")
+                except Exception as e:
+                    logger.debug(f"[Daemon] Management agent error: {e}")
 
             self._state["last_management"] = datetime.now().isoformat()
             self._state["management_count"] = self._state.get("management_count", 0) + 1
@@ -250,6 +321,22 @@ class AetheraDaemon:
                 await self.engine.run_threshold_evolution(auto_apply=False)
             except Exception as e:
                 logger.debug(f"[Daemon] Threshold evolution: {e}")
+
+            # Reflection agent — LLM-guided learning
+            if self.reflection_agent and self.reflection_agent.is_ready():
+                try:
+                    agent_result = await self.reflection_agent.reflect(
+                        engine=self.engine,
+                        vault_skills=self.engine.vault_skills if hasattr(self.engine, 'vault_skills') else None,
+                        vault_lessons=self.engine.vault_lessons if hasattr(self.engine, 'vault_lessons') else None,
+                        vault_memory=self.engine.vault_memory if hasattr(self.engine, 'vault_memory') else None,
+                        vault_indexer=self.engine.vault_indexer if hasattr(self.engine, 'vault_indexer') else None,
+                        vault_search=self.engine.vault_search if hasattr(self.engine, 'vault_search') else None,
+                        hivemind_client=getattr(self.engine, 'hivemind_client', None),
+                    )
+                    logger.info(f"[Daemon] Reflection agent: {agent_result.get('skills_created', [])}")
+                except Exception as e:
+                    logger.debug(f"[Daemon] Reflection agent error: {e}")
 
             self._state["last_reflection"] = datetime.now().isoformat()
             self._state["reflection_count"] = self._state.get("reflection_count", 0) + 1

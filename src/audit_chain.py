@@ -1,10 +1,13 @@
 """
-Audit Chain — tamper-evident HMAC decision log.
-Each entry links to the previous via SHA-256, forming an immutable chain.
+Audit Chain — HMAC-based tamper-evident decision log.
+Each entry is HMAC-signed with a file-persisted secret key.
+Immutable: any tampering breaks the hash chain and fails verification.
 """
 import json
 import os
+import hmac
 import hashlib
+import secrets
 import logging
 from datetime import datetime
 from typing import Optional
@@ -12,12 +15,26 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 AUDIT_PATH = "data/audit_chain.json"
+AUDIT_SECRET_PATH = "data/.audit_secret"
 GENESIS_HASH = "0" * 64
+
+
+def _get_audit_secret() -> bytes:
+    if os.path.exists(AUDIT_SECRET_PATH):
+        with open(AUDIT_SECRET_PATH, "rb") as f:
+            return f.read()
+    secret = secrets.token_bytes(32)
+    os.makedirs("data", exist_ok=True)
+    with open(AUDIT_SECRET_PATH, "wb") as f:
+        f.write(secret)
+    os.chmod(AUDIT_SECRET_PATH, 0o600)
+    return secret
 
 
 class AuditChain:
     def __init__(self, path: str = AUDIT_PATH):
         self._path = path
+        self._secret = _get_audit_secret()
         self._entries: list = []
         self._load()
 
@@ -38,7 +55,7 @@ class AuditChain:
 
     def _hash_entry(self, entry: dict, prev_hash: str) -> str:
         payload = json.dumps({"entry": entry, "prev": prev_hash}, sort_keys=True)
-        return hashlib.sha256(payload.encode()).hexdigest()
+        return hmac.new(self._secret, payload.encode(), hashlib.sha256).hexdigest()
 
     def append(self, entry: dict) -> str:
         prev_hash = self.get_last_hash()

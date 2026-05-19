@@ -1,38 +1,22 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Box, Text, useApp, useInput } from 'ink'
-import { TextInput } from '@inkjs/ui'
-import { fetchStatus, fetchSignals, triggerScan, connectWs, wsSendScan, wsPing, type WsMessage } from './api.js'
-import type { Signal, SystemStatus, SignalsResponse } from './types.js'
+import Header from './components/header.js'
+import Transcript from './components/transcript.js'
+import CommandInput from './components/input.js'
+import Modal from './components/modal.js'
+import { fetchStatus, fetchSignals, triggerScan } from './api.js'
+import type { WsMessage } from './api.js'
+import { connectWs, wsSendScan, wsPing } from './stream.js'
+import { commands } from './commands/registry.js'
+import type { Signal, SystemStatus } from './types.js'
 
 interface Props {
   baseUrl: string
 }
 
-const COMMANDS = ['/status', '/signals', '/scan', '/debate', '/strategy', '/balance', '/help', '/stop']
-
-function modeLabel(mode: string): string {
-  if (mode.includes('TRADE')) return 'LIVE[TRADE]'
-  if (mode.includes('SIGNALS')) return 'LIVE[SIGNALS]'
-  if (mode === 'DRY-RUN') return 'DRY-RUN'
-  return 'OFFLINE'
-}
-
-function modeColor(mode: string): string {
-  if (mode.includes('TRADE') || mode.includes('SIGNALS')) return 'green'
-  if (mode === 'DRY-RUN') return 'yellow'
-  return 'red'
-}
-
 function signalColor(sig: string): string {
   if (sig === 'LONG') return 'green'
   if (sig === 'SHORT') return 'red'
-  return 'gray'
-}
-
-function regimeColor(regime: string): string {
-  if (regime === 'BULL') return 'green'
-  if (regime === 'BEAR') return 'red'
-  if (regime === 'HIGH_VOL') return 'yellow'
   return 'gray'
 }
 
@@ -60,6 +44,11 @@ export default function App({ baseUrl }: Props) {
     setTerminalLines(prev => [...prev.slice(-50), line])
   }, [])
 
+  const commandContext = {
+    status, signals, baseUrl, wsConnected, wsRef,
+    addLine, setStatus, setSignals, exit,
+  }
+
   // WebSocket connection
   useEffect(() => {
     const ws = connectWs(
@@ -74,11 +63,46 @@ export default function App({ baseUrl }: Props) {
           }
           case 'scan_complete': {
             addLine('  [green]Scan complete[/]')
-            // Fetch fresh signals after scan
             fetchSignals(baseUrl).then(r => {
               if (r.ok) setSignals(r.data)
             })
             fetchStatus(baseUrl).then(s => setStatus(s))
+            break
+          }
+          case 'signal': {
+            const d = msg.data as { symbol?: string; signal?: string; confidence?: number }
+            if (d.symbol && d.signal) {
+              addLine(`  [green]Signal[/] ${d.symbol} → ${d.signal} (${d.confidence || 0}%)`)
+              fetchSignals(baseUrl).then(r => { if (r.ok) setSignals(r.data) })
+            }
+            break
+          }
+          case 'status': {
+            const d = msg.data as unknown as SystemStatus | undefined
+            if (d) {
+              setStatus(d)
+              addLine(`  [dim]Status update — ${d.scan_count} scans, ${d.mode}[/]`)
+            }
+            break
+          }
+          case 'trade': {
+            const d = msg.data as { symbol?: string; action?: string; pnl_pct?: number }
+            if (d.symbol) {
+              addLine(`  [yellow]Trade[/] ${d.symbol} ${d.action || 'execute'} ${d.pnl_pct != null ? `(${d.pnl_pct > 0 ? '+' : ''}${d.pnl_pct.toFixed(1)}%)` : ''}`)
+            }
+            break
+          }
+          case 'alert': {
+            const d = msg.data as { message?: string; level?: string }
+            const color = d.level === 'critical' ? 'red' : d.level === 'warning' ? 'yellow' : 'dim'
+            addLine(`  [${color}]ALERT[/] ${d.message || 'Unknown alert'}`)
+            break
+          }
+          case 'debate': {
+            const d = msg.data as { symbol?: string; signal?: string; confidence?: number }
+            if (d.symbol) {
+              addLine(`  [cyan]Debate[/] ${d.symbol} → ${d.signal || 'WAIT'} (${d.confidence || 0}%)`)
+            }
             break
           }
           case 'pong':
@@ -88,7 +112,6 @@ export default function App({ baseUrl }: Props) {
       () => {
         setWsConnected(true)
         addLine('  [green]WebSocket connected[/]')
-        // Keep-alive ping every 30s
         pingTimer.current = setInterval(() => {
           if (wsRef.current) wsPing(wsRef.current)
         }, 30_000)
@@ -112,84 +135,27 @@ export default function App({ baseUrl }: Props) {
 
     addLine(`> ${trimmed}`)
 
-    switch (trimmed) {
-      case '/help':
-        addLine('  Commands:')
-        addLine('    /status    — Show system status')
-        addLine('    /signals   — Show latest signals')
-        addLine('    /scan      — Trigger manual scan')
-        addLine('    /debate    — Show debate stats')
-        addLine('    /strategy  — Show LLM strategy')
-        addLine('    /balance   — Show balance')
-        addLine('    /stop      — Exit TUI')
-        addLine('')
-        break
-
-      case '/status':
-        addLine(`  Mode: ${modeLabel(status.mode)} | Balance: ${status.balance ? '$' + status.balance.toFixed(2) : 'N/A'}`)
-        addLine(`  Scans: ${status.scan_count} | Last: ${status.last_scan}`)
-        addLine(`  Strategy: ${status.strategy.pairs.length} pairs | Dir: ${status.strategy.direction} | Conf≥${status.strategy.confidence_threshold}`)
-        addLine('')
-        break
-
-      case '/signals':
-        addLine(`  ${signals.length} signals in last scan`)
-        for (const s of signals.slice(0, 8)) {
-          const debate = s.debate_overrode ? ` [⚡${s.debate_signal}]` : ''
-          addLine(`    ${s.symbol.padEnd(12)} ${s.signal.padEnd(5)} conf=${String(s.confidence).padStart(2)} score=${s.composite_score.toFixed(1).padStart(5)} ${s.regime}${debate}`)
+    const handler = commands[trimmed]
+    if (handler) {
+      await handler(commandContext)
+    } else if (trimmed === '/scan') {
+      addLine('  Triggering scan via WebSocket...')
+      if (wsRef.current && wsConnected) {
+        wsSendScan(wsRef.current)
+      } else {
+        const res = await triggerScan(baseUrl)
+        addLine(res.ok ? '  Scan triggered (HTTP fallback)' : '  Scan failed')
+        if (res.ok) {
+          fetchSignals(baseUrl).then(r => { if (r.ok) setSignals(r.data) })
+          fetchStatus(baseUrl).then(s => setStatus(s))
         }
-        addLine('')
-        break
-
-      case '/scan':
-        addLine('  Triggering scan via WebSocket...')
-        if (wsRef.current && wsConnected) {
-          wsSendScan(wsRef.current)
-        } else {
-          // Fallback to HTTP
-          const res = await triggerScan(baseUrl)
-          addLine(res.ok ? '  Scan triggered (HTTP fallback)' : '  Scan failed')
-          if (res.ok) {
-            fetchSignals(baseUrl).then(r => { if (r.ok) setSignals(r.data) })
-            fetchStatus(baseUrl).then(s => setStatus(s))
-          }
-        }
-        addLine('')
-        break
-
-      case '/debate': {
-        const d = status.debate_stats
-        if (d.total > 0) {
-          addLine(`  Debates: ${d.total} | L:${d.longs} S:${d.shorts} W:${d.waits} | Avg conf: ${d.avg_confidence.toFixed(0)}% | Overrides: ${d.overrides}`)
-        } else {
-          addLine('  No debates yet (signals need conf >= 50)')
-        }
-        addLine('')
-        break
       }
-
-      case '/strategy':
-        addLine(`  Pairs: ${status.strategy.pairs.join(', ') || 'default'}`)
-        addLine(`  Direction: ${status.strategy.direction} | Conf≥${status.strategy.confidence_threshold}`)
-        addLine(`  Max trades: ${status.strategy.max_trades}`)
-        addLine('')
-        break
-
-      case '/balance':
-        addLine(status.balance ? `  Balance: $${status.balance.toFixed(2)}` : '  Balance: N/A')
-        addLine('')
-        break
-
-      case '/stop':
-        addLine('  Exiting...')
-        setTimeout(() => exit(), 500)
-        break
-
-      default:
-        addLine(`  Unknown command: ${trimmed}`)
-        addLine('')
+      addLine('')
+    } else {
+      addLine(`  Unknown command: ${trimmed}`)
+      addLine('')
     }
-  }, [baseUrl, status, signals, addLine, exit])
+  }, [baseUrl, status, signals, addLine, exit, wsConnected])
 
   useInput((input, key) => {
     if (input === 'q' || input === 'Q') {
@@ -202,35 +168,24 @@ export default function App({ baseUrl }: Props) {
     setInputKey(k => k + 1)
   }
 
-  const mode = modeLabel(status.mode)
-  const mColor = modeColor(status.mode)
-  const ds = status.debate_stats
   const width = process.stdout.columns || 120
+  const ds = status.debate_stats
 
-  // Header
-  const headerLeft = `⚡ Aethera v1.5  [${mode}]  Scan #${status.scan_count}`
-  const headerRight = status.balance ? `$${status.balance.toFixed(2)}` : '---'
-  const connStatus = wsConnected ? '●' : '○'
-  const connColor = wsConnected ? 'green' : 'red'
-
-  // Signals table header
+  // Signals table
   const sigHeader = `  Symbol       Signal  Conf  Score  Regime     Reason`
   const sigDivider = `  ${'─'.repeat(12)} ${'─'.repeat(6)} ${'─'.repeat(4)} ${'─'.repeat(5)} ${'─'.repeat(8)} ${'─'.repeat(25)}`
 
-  // Signal rows
   const sigRows = signals.slice(0, 12).map(s => {
     const debate = s.debate_overrode ? ` ⚡${s.debate_signal}` : ''
     const reason = (s.reasons?.[0] || '').slice(0, 25)
     return `  ${s.symbol.padEnd(12)} ${s.signal.padEnd(5)} ${String(s.confidence).padStart(4)}  ${s.composite_score.toFixed(1).padStart(5)}  ${s.regime.padEnd(8)} ${reason}${debate}`
   })
 
-  // Summary line
   const longs = signals.filter(s => s.signal === 'LONG').length
   const shorts = signals.filter(s => s.signal === 'SHORT').length
   const waits = signals.filter(s => s.signal === 'WAIT').length
   const summary = `  ${longs}L / ${shorts}S / ${waits}W  |  Total: ${signals.length}`
 
-  // Debate stats sidebar
   const debateLines = ds.total > 0
     ? [
         `  Debates: ${ds.total}`,
@@ -242,20 +197,11 @@ export default function App({ baseUrl }: Props) {
       ]
     : ['  No debates yet']
 
-  // Terminal lines (last 8)
   const termLines = terminalLines.slice(-8)
 
   return (
     <Box flexDirection="column" width={width}>
-      {/* Header */}
-      <Box>
-        <Text bold color="cyan">{headerLeft}</Text>
-        <Text>  </Text>
-        <Text color={connColor}>{connStatus}</Text>
-        <Text>  </Text>
-        <Text color={mColor} bold>{headerRight}</Text>
-        {ds.total > 0 && <Text>  Debate:{ds.total}</Text>}
-      </Box>
+      <Header status={status} wsConnected={wsConnected} />
 
       {/* Signals panel */}
       <Box marginTop={1}>
@@ -289,34 +235,11 @@ export default function App({ baseUrl }: Props) {
         </Box>
       </Box>
 
-      {/* Terminal */}
-      <Box marginTop={1} flexDirection="column">
-        <Text bold color="cyan">Terminal</Text>
-        <Box borderStyle="single" borderColor="gray" paddingX={1} width={width - 2}>
-          <Box flexDirection="column" width={width - 4}>
-            {termLines.map((l, i) => {
-              let color: string | undefined
-              if (l.startsWith('>')) color = 'cyan'
-              else if (l.includes('Error') || l.includes('failed')) color = 'red'
-              else if (l.includes('triggered') || l.includes('complete')) color = 'green'
-              return <Text key={i} color={color}>{l}</Text>
-            })}
-          </Box>
-        </Box>
-      </Box>
+      {/* Transcript */}
+      <Transcript lines={termLines} width={width} />
 
       {/* Input */}
-      {showInput && (
-        <Box marginTop={1}>
-          <Text color="green">❯ </Text>
-          <TextInput
-            key={inputKey}
-            onSubmit={onInputSubmit}
-            suggestions={COMMANDS}
-            placeholder="Type /help for commands..."
-          />
-        </Box>
-      )}
+      {showInput && <CommandInput onSubmit={onInputSubmit} inputKey={inputKey} />}
 
       {/* Footer */}
       <Box marginTop={1}>

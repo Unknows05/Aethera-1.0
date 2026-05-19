@@ -4,6 +4,7 @@ Circuit breaker now properly increments loss counters.
 """
 import logging
 import json
+from datetime import datetime
 from typing import Dict
 from pathlib import Path
 
@@ -172,6 +173,25 @@ class RiskManager:
         status = self.status.copy()
         status["risk_tier"] = self.get_risk_tier_info()
         return status
+
+    def get_loss_streak(self) -> int:
+        """Return current consecutive loss count (for RiskGate integration)."""
+        return self.status.get("consecutive_losses", 0)
+
+    def get_daily_trade_count(self) -> int:
+        """Return daily trade count from DB (for RiskGate integration)."""
+        try:
+            from src.database import ScreenerDB
+            db = ScreenerDB(self.db_path) if self.db_path else ScreenerDB("data/screener.db")
+            today = datetime.now().strftime("%Y-%m-%d")
+            signals = db.get_signals_with_outcomes(limit=200, days=1)
+            return len([s for s in signals if s.get("timestamp", "").startswith(today)])
+        except Exception:
+            return 0
+
+    def get_drawdown_pct(self) -> float:
+        """Return current drawdown percentage (for RiskGate integration)."""
+        return round(self.current_drawdown * 100, 2) if self.current_drawdown else 0.0
 
 
 def get_risk_manager(config=None, db_path=None) -> RiskManager:

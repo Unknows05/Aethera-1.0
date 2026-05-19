@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aethera — Learn</title>
+<style>
+:root {
+  --bg: #0a0a0f;
+  --panel: #12121a;
+  --border: #1e1e2e;
+  --text: #e0e0e0;
+  --green: #00d4aa;
+  --red: #ff4d6a;
+  --yellow: #f0c040;
+  --accent: #6c8cff;
+  --gray: #6e6e8a;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+h1 { color: var(--accent); margin-bottom: 8px; }
+h2 { color: var(--accent); margin: 24px 0 12px; font-size: 1.1rem; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+.nav a { color: var(--gray); text-decoration: none; margin-left: 16px; }
+.nav a:hover, .nav a.active { color: var(--accent); }
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
+.label { color: var(--gray); font-size: 0.85rem; }
+.value { font-size: 1.2rem; font-weight: 600; }
+.value.green { color: var(--green); }
+.value.red { color: var(--red); }
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.badge.win { background: rgba(0,212,170,0.15); color: var(--green); }
+.badge.loss { background: rgba(255,77,106,0.15); color: var(--red); }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+th { color: var(--gray); font-size: 0.8rem; text-transform: uppercase; }
+td { font-size: 0.9rem; }
+.skill-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.skill-card h3 { color: var(--accent); margin-bottom: 4px; font-size: 0.95rem; }
+.skill-card .meta { color: var(--gray); font-size: 0.8rem; margin-bottom: 8px; }
+.skill-card .content { font-size: 0.9rem; line-height: 1.5; }
+.tags { margin-top: 8px; }
+.tag {
+  display: inline-block;
+  padding: 1px 6px;
+  background: var(--border);
+  color: var(--gray);
+  border-radius: 3px;
+  font-size: 0.7rem;
+  margin-right: 4px;
+}
+.empty { color: var(--gray); font-style: italic; padding: 24px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Learning & Knowledge Vault</h1>
+  <div class="nav">
+    <a href="dashboard.html">Overview</a>
+    <a href="data.html">Signals</a>
+    <a href="strategy.html">Strategy</a>
+    <a href="learn.html" class="active">Learn</a>
+    <a href="hivemind.html">Swarm</a>
+    <a href="account.html">Settings</a>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h2>Performance Summary</h2>
+    <div class="label">Win Rate</div>
+    <div class="value green">Loading...</div>
+    <div class="label">Total Trades</div>
+    <div class="value">0</div>
+    <div class="label">Avg Win PnL</div>
+    <div class="value green">--%</div>
+    <div class="label">Avg Loss PnL</div>
+    <div class="value red">--%</div>
+    <div class="label">Profit Factor</div>
+    <div class="value">--</div>
+  </div>
+
+  <div class="card">
+    <h2>Reflection Cycles</h2>
+    <div class="label">Last Reflection</div>
+    <div class="value">--</div>
+    <div class="label">Total Cycles</div>
+    <div class="value">0</div>
+    <div class="label">Skills Created</div>
+    <div class="value">0</div>
+    <div class="label">Lessons Learned</div>
+    <div class="value">0</div>
+    <div class="label">Swarm Syncs</div>
+    <div class="value">0</div>
+  </div>
+</div>
+
+<h2>Skills<span style="font-weight:400;font-size:0.8rem;color:var(--gray);margin-left:8px;">(auto-created from patterns)</span></h2>
+<div class="empty">No skills created yet. Skills are auto-generated when 3+ similar trade outcomes occur.</div>
+
+<h2>Recent Lessons<span style="font-weight:400;font-size:0.8rem;color:var(--gray);margin-left:8px;">(per-trade insights)</span></h2>
+<div class="empty">No lessons recorded yet. Lessons are created after each trade closes.</div>
+
+<h2>Vault Structure</h2>
+<div class="card">
+  <table>
+    <tr><th>Directory</th><th>Description</th><th>Files</th></tr>
+    <tr><td>vault/skills/</td><td>Auto-created trading skills from patterns</td><td>0</td></tr>
+    <tr><td>vault/lessons/</td><td>Per-trade lessons with outcomes</td><td>0</td></tr>
+    <tr><td>vault/memory/</td><td>Bounded agent memory (MEMORY.md)</td><td>0</td></tr>
+    <tr><td>vault/strategies/</td><td>User-defined trading strategies</td><td>0</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Threshold Evolution</h2>
+  <p style="color: var(--gray);">
+    Thresholds auto-evolve every 5+ closed positions. Current thresholds are default until sufficient data is collected.
+  </p>
+  <table style="margin-top: 12px;">
+    <tr><th>Parameter</th><th>Current</th><th>Suggested</th></tr>
+    <tr><td>Min Confidence</td><td>65</td><td>--</td></tr>
+    <tr><td>Stop Loss %</td><td>3.0</td><td>--</td></tr>
+    <tr><td>Take Profit %</td><td>6.0</td><td>--</td></tr>
+    <tr><td>Max Daily Trades</td><td>5</td><td>--</td></tr>
+  </table>
+</div>
+</body>
+</html>

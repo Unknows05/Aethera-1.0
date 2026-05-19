@@ -647,6 +647,41 @@ async def get_learning_state():
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+@app.get("/api/swarm/status")
+async def get_swarm_status():
+    """Standalone swarm connection status endpoint."""
+    try:
+        env = {}
+        env_path = Path(".env")
+        if env_path.exists():
+            with open(env_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and "=" in line and not line.startswith("#"):
+                        k, v = line.split("=", 1)
+                        env[k.strip()] = v.strip().strip("\"'")
+
+        url = env.get("HIVEMIND_URL", "")
+        agent_id = env.get("AGENT_ID", "")
+
+        if not url:
+            return {"ok": True, "swarm": {"connected": False, "reason": "not_configured", "agent_id": agent_id}}
+
+        import requests
+        try:
+            r = requests.get(f"{url.rstrip('/')}/health", timeout=3)
+            if r.status_code == 200:
+                data = r.json()
+                return {"ok": True, "swarm": {"connected": True, "server_url": url, "server_status": "online",
+                         "agents": data.get("agents", 0), "lessons": data.get("lessons", 0),
+                         "agent_id": agent_id}}
+            else:
+                return {"ok": True, "swarm": {"connected": False, "server_url": url, "server_status": f"http_{r.status_code}", "agent_id": agent_id}}
+        except Exception as e:
+            return {"ok": True, "swarm": {"connected": False, "server_url": url, "server_status": "offline", "error": str(e), "agent_id": agent_id}}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 @app.get("/api/ml/shadow-status")
 async def ml_shadow_status():
     try:

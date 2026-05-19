@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aethera — Strategy</title>
+<style>
+:root {
+  --bg: #0a0a0f;
+  --panel: #12121a;
+  --border: #1e1e2e;
+  --text: #e0e0e0;
+  --green: #00d4aa;
+  --red: #ff4d6a;
+  --yellow: #f0c040;
+  --accent: #6c8cff;
+  --gray: #6e6e8a;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+h1 { color: var(--accent); margin-bottom: 8px; }
+h2 { color: var(--accent); margin: 24px 0 12px; font-size: 1.1rem; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+.nav a { color: var(--gray); text-decoration: none; margin-left: 16px; }
+.nav a:hover, .nav a.active { color: var(--accent); }
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.label { color: var(--gray); font-size: 0.85rem; }
+.value { font-size: 1.2rem; font-weight: 600; }
+.value.green { color: var(--green); }
+.value.red { color: var(--red); }
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.badge.bull { background: rgba(0,212,170,0.15); color: var(--green); }
+.badge.bear { background: rgba(255,77,106,0.15); color: var(--red); }
+.badge.both { background: rgba(108,140,255,0.15); color: var(--accent); }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+th { color: var(--gray); font-size: 0.8rem; text-transform: uppercase; }
+td { font-size: 0.9rem; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.status-dot.active { background: var(--green); }
+.status-dot.inactive { background: var(--gray); }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Strategy Configuration</h1>
+  <div class="nav">
+    <a href="dashboard.html">Overview</a>
+    <a href="data.html">Signals</a>
+    <a href="strategy.html" class="active">Strategy</a>
+    <a href="learn.html">Learn</a>
+    <a href="hivemind.html">Swarm</a>
+    <a href="account.html">Settings</a>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h2>Screening</h2>
+    <div class="label">Interval</div>
+    <div class="value">15 minutes</div>
+    <div class="label">Universe Size</div>
+    <div class="value">500 coins</div>
+    <div class="label">Top-N Filter</div>
+    <div class="value">100 candidates</div>
+    <div class="label">Min Volume</div>
+    <div class="value">$5,000,000</div>
+    <div class="label">Debates per Cycle</div>
+    <div class="value">5</div>
+  </div>
+
+  <div class="card">
+    <h2>Management</h2>
+    <div class="label">Interval</div>
+    <div class="value">5 minutes</div>
+    <div class="label">Max Position Size</div>
+    <div class="value">5% of equity</div>
+    <div class="label">Stop Loss</div>
+    <div class="value red">3%</div>
+    <div class="label">Take Profit</div>
+    <div class="value green">6%</div>
+    <div class="label">Trailing TP Trigger</div>
+    <div class="value">3%</div>
+  </div>
+
+  <div class="card">
+    <h2>Risk Gates</h2>
+    <div class="label">Max Drawdown</div>
+    <div class="value red">20% — Circuit Breaker</div>
+    <div class="label">Circuit Breaker</div>
+    <div class="value">3 consecutive losses</div>
+    <div class="label">Pause Duration</div>
+    <div class="value">4 hours</div>
+    <div class="label">Max Correlation Exposure</div>
+    <div class="value">0.30</div>
+    <div class="label">Max LLM Overrides / Day</div>
+    <div class="value">3</div>
+  </div>
+
+  <div class="card">
+    <h2>Capital Tier</h2>
+    <div class="label">Current Balance</div>
+    <div class="value">Loading...</div>
+    <div class="label">Tier</div>
+    <div class="value">AGGRESSIVE</div>
+    <div class="label">Max Leverage</div>
+    <div class="value">20x</div>
+    <div class="label">Max Trades / Day</div>
+    <div class="value">5</div>
+    <div class="label">Target</div>
+    <div class="value green">15-50% / day</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>LLM Model Configuration</h2>
+  <table>
+    <tr>
+      <th>Component</th>
+      <th>Model</th>
+      <th>Status</th>
+    </tr>
+    <tr>
+      <td>Screening Agent</td>
+      <td>deepseek/deepseek-chat-v4:free</td>
+      <td><span class="status-dot active"></span>Active</td>
+    </tr>
+    <tr>
+      <td>Management Agent</td>
+      <td>deepseek/deepseek-chat-v4:free</td>
+      <td><span class="status-dot active"></span>Active</td>
+    </tr>
+    <tr>
+      <td>Bull/Bear Debate</td>
+      <td>deepseek/deepseek-chat-v4:free</td>
+      <td><span class="status-dot active"></span>Active</td>
+    </tr>
+    <tr>
+      <td>Reflection Agent</td>
+      <td>deepseek/deepseek-chat-v4:free</td>
+      <td><span class="status-dot active"></span>Active</td>
+    </tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Active Strategy — Direction Bias</h2>
+  <span class="badge both">BOTH</span>
+  <p style="margin-top: 12px; color: var(--gray);">
+    Strategy is auto-generated by LLM Screening Agent every cycle.
+    Direction bias, pair selection, and confidence thresholds adapt to market regime.
+  </p>
+</div>
+</body>
+</html>
