@@ -25,5 +25,5 @@ Thumbs.db
 tui/node_modules/
 tui/dist/
 
-# Vault
-vault/
+# Vault data
+/vault/
