@@ -5,9 +5,17 @@
 
 ## Quick Start
 
+### One-Line Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Unknows05/Aethera-1.0/main/install.sh | bash
+```
+
+### Manual Install
+
 ```bash
 # 1. Clone
-git clone https://github.com/YOUR_USERNAME/Aethera.git
+git clone https://github.com/Unknows05/Aethera-1.0.git
 cd Aethera
 
 # 2. Install
@@ -277,4 +285,5 @@ Your raw data **never leaves your machine**. Only distilled, anonymized knowledg
 - **Swarm Dashboard**: https://hivemind.aethera-s1.com
 - **Landing Page**: https://aethera-s1.com
 - **HiveMind API**: https://hivemind.aethera-s1.com/api/hivemind/health
+
 

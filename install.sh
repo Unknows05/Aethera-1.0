@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Aethera v1.5 — Installer
+# Aethera v1.6 — Installer
 # Usage: curl -fsSL https://raw.githubusercontent.com/Unknows05/Aethera-1.0/main/install.sh | bash
 
 set -euo pipefail
@@ -13,7 +13,7 @@ NC='\033[0m'
 
 REPO="https://github.com/Unknows05/Aethera-1.0.git"
 INSTALL_DIR="${AETHERA_DIR:-$HOME/aethera}"
-VERSION="1.5.0"
+VERSION="1.6.0"
 
 echo -e "${CYAN}"
 echo "  ╔══════════════════════════════════════╗"
