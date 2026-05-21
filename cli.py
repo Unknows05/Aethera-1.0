@@ -174,7 +174,7 @@ def _fetch_openrouter_models():
             name = m.get("name", mid)
             ctx = m.get("context_length", 0)
             params = m.get("supported_parameters", [])
-            if isinstance(params, list) and params and "tools" not in params:
+            if type(params) is list and params and "tools" not in params:
                 continue
             models.append((mid, name, pc, cc, ctx))
         models.sort(key=lambda x: (0 if x[2] + x[3] == 0 else 1, x[2] + x[3]))
@@ -827,13 +827,26 @@ def start():
     Path("data").mkdir(exist_ok=True)
     pid_file.write_text(str(api_proc.pid))
 
+    # Read API key from config for auth
+    try:
+        import yaml
+        cfg = yaml.safe_load(Path("config.yaml").read_text())
+        api_key = cfg.get("api", {}).get("api_key", "")
+        auth_enabled = cfg.get("api", {}).get("auth_enabled", True)
+    except Exception:
+        api_key = ""
+        auth_enabled = True
+
     # Wait for API to be ready
     console.print("[dim]Waiting for API server...[/dim]")
     for i in range(10):
         time.sleep(1)
         try:
             import urllib.request
-            urllib.request.urlopen("http://127.0.0.1:8000/api/status", timeout=2)
+            req = urllib.request.Request("http://127.0.0.1:8000/api/status")
+            if auth_enabled and api_key:
+                req.add_header("X-API-Key", api_key)
+            urllib.request.urlopen(req, timeout=2)
             console.print("[green]API server ready[/green]")
             break
         except Exception:
@@ -849,13 +862,17 @@ def start():
                 pid_file.unlink(missing_ok=True)
                 return
 
-    # Launch TypeScript TUI
+    # Launch TypeScript TUI (pass API key for auth)
     console.print("[cyan]Launching Aethera TUI...[/cyan]")
     console.print("[dim]Press q to quit[/dim]\n")
 
+    tui_env = os.environ.copy()
+    if auth_enabled and api_key:
+        tui_env["AETHERA_API_KEY"] = api_key
+
     tui_cmd = ["node", str(tui_dist)]
     try:
-        subprocess.run(tui_cmd, cwd=str(SCRIPT_DIR))
+        subprocess.run(tui_cmd, cwd=str(SCRIPT_DIR), env=tui_env)
     except KeyboardInterrupt:
         pass
     finally:
@@ -1293,7 +1310,7 @@ def search(query, limit):
 
 @vault.command()
 @click.option("--folder", default=None, help="Filter: skills, lessons, memory, strategies")
-def list(folder):
+def vault_list(folder):
     """List vault files with stats."""
     try:
         from src.vault.indexer import VaultIndexer
@@ -2247,6 +2264,8 @@ def debate(lines):
 
 if __name__ == "__main__":
     cli()
+
+
 
 
 

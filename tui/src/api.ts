@@ -7,11 +7,19 @@ const _WebSocket: any = require('ws')
 
 const DEFAULT_BASE = 'http://127.0.0.1:8000'
 
-const api = (base: string) => ky.create({
-  prefixUrl: base,
-  timeout: 10_000,
-  retry: { limit: 0 },
-})
+const api = (base: string) => {
+  const apiKey = process.env.AETHERA_API_KEY || ''
+  const headers: Record<string, string> = {}
+  if (apiKey) {
+    headers['X-API-Key'] = apiKey
+  }
+  return ky.create({
+    prefixUrl: base,
+    timeout: 10_000,
+    retry: { limit: 0 },
+    headers,
+  })
+}
 
 export async function fetchStatus(baseUrl: string): Promise<SystemStatus> {
   try {
@@ -85,3 +93,4 @@ export function wsSendScan(ws: any): void {
 export function wsPing(ws: any): void {
   ws.send(JSON.stringify({ type: 'ping' }))
 }
+
