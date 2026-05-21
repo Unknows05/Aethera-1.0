@@ -228,6 +228,184 @@ def cli():
     """Aethera V1.6 — Autonomous crypto trading agent."""
 
 
+
+
+# ---- init ----
+
+@cli.command()
+def init():
+    """Full interactive setup wizard for Aethera v1.6."""
+    console.print(Panel.fit("[bold cyan]Aethera v1.6 — Setup Wizard[/bold cyan]"))
+
+    # Step 0: Public IP
+    ip = _public_ip()
+    if ip:
+        console.print(f"\n[green]Your IP: {ip}[/green]")
+        console.print("[dim]Whitelist this IP in Binance API settings.[/dim]")
+    else:
+        console.print("\n[yellow]Cannot detect IP. Whitelist your server IP in Binance.[/yellow]")
+
+    # Step 1: Binance API
+    console.print("\n[bold]1. Binance API[/bold]")
+    console.print("[dim]Binance -> API Management -> [check] Enable Futures  [ ] Enable Withdrawals[/dim]")
+    while True:
+        api_key = click.prompt("API Key", default="", show_default=False, hide_input=True)
+        if api_key.strip():
+            break
+        console.print("[yellow]Required.[/yellow]")
+    while True:
+        api_secret = click.prompt("Secret Key", default="", show_default=False, hide_input=True)
+        if api_secret.strip():
+            break
+        console.print("[yellow]Required.[/yellow]")
+
+    _env_set("BINANCE_API_KEY", api_key)
+    _env_set("BINANCE_API_SECRET", api_secret)
+
+    bal = _balance(api_key, api_secret)
+    if bal is not None:
+        tier = _tier_label(bal)
+        console.print(f"[green]Balance: ${bal:.2f} — {tier}[/green]")
+    else:
+        console.print("[yellow]Could not verify balance.[/yellow]")
+        console.print("[dim]Check: IP whitelisted? Futures enabled? Internet OK?[/dim]")
+        if not click.confirm("Continue anyway?", default=False):
+            console.print("[dim]Re-run 'aethera init' when ready.[/dim]")
+            return
+
+    # Step 2: LLM Provider
+    console.print("\n[bold]2. LLM Model[/bold]")
+    console.print("[dim]Aethera uses LLM as trading strategist.[/dim]")
+    prov = click.prompt("  Provider", type=click.Choice(["openrouter", "openai", "groq", "ollama"]), default="openrouter")
+    _env_set("LLM_PROVIDER", prov)
+
+    if prov in ("openrouter", "openai", "groq"):
+        base_urls = {
+            "openrouter": "https://openrouter.ai/api/v1",
+            "openai": "https://api.openai.com/v1",
+            "groq": "https://api.groq.com/openai/v1",
+        }
+
+        # Try fetch models from API
+        console.print("\n  [dim]Fetching models from API...[/dim]")
+        models = _fetch_openrouter_models()
+
+        if models:
+            console.print(_model_table(models))
+            console.print(f"  [dim]Found {len(models)} models. Pick by number or type exact model ID.[/dim]")
+            while True:
+                choice = click.prompt("  Model", default="1").strip()
+                if choice:
+                    break
+
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(models):
+                    mdl = models[idx][0]
+                else:
+                    console.print(f"  [yellow]#{choice} out of range.[/yellow]")
+                    mdl = click.prompt("  Type model ID")
+            except ValueError:
+                matched = [m for m in models if m[0] == choice]
+                if matched:
+                    mdl = matched[0][0]
+                else:
+                    mdl = choice
+        else:
+            # Fetch failed — ask user what to do
+            console.print("  [yellow]Cannot fetch models from API.[/yellow]")
+            action = click.prompt("  What do you want to do?", type=click.Choice(["enter", "skip"]), default="enter")
+
+            if action == "enter":
+                mdl = click.prompt("  Type model ID")
+            else:
+                console.print("  [dim]Skipping LLM setup. Configure later in .env[/dim]")
+                mdl = None
+
+        if mdl:
+            _env_set("LLM_MODEL", mdl)
+            console.print(f"  [green]Model: {mdl}[/green]")
+
+            while True:
+                llm_key = click.prompt("  API Key", default="", show_default=False, hide_input=True)
+                if llm_key.strip():
+                    break
+                console.print("  [yellow]Required.[/yellow]")
+
+            if prov == "openrouter":
+                _env_set("OPENROUTER_API_KEY", llm_key)
+            else:
+                _env_set("LLM_API_KEY", llm_key)
+
+            _env_set("LLM_BASE_URL", base_urls.get(prov, ""))
+
+            console.print("  [dim]Testing LLM connection...[/dim]")
+            try:
+                from openai import OpenAI
+                c = OpenAI(base_url=base_urls[prov], api_key=llm_key, timeout=10)
+                r = c.chat.completions.create(model=mdl, messages=[{"role": "user", "content": "OK"}], max_tokens=2)
+                if r.choices:
+                    console.print("  [green]LLM OK[/green]")
+            except Exception as e:
+                console.print(f"  [yellow]Test failed: {e}[/yellow]")
+        else:
+            console.print("  [dim]LLM not configured.[/dim]")
+
+    elif prov == "ollama":
+        _env_set("LLM_BASE_URL", "http://localhost:11434/v1")
+        mdl = click.prompt("  Model name", default="qwen2.5:3b")
+        _env_set("LLM_MODEL", mdl)
+        console.print(f"  [green]Ollama configured: {mdl} (local)[/green]")
+    # Step 3: HiveMind Swarm
+    console.print("\n[bold]3. HiveMind Swarm[/bold]")
+    console.print("[dim]Connect to hivemind.aethera-s1.com for crowd intelligence.[/dim]")
+    console.print("[dim]Only anonymized lessons are shared — no PnL, no prices.[/dim]")
+    if click.confirm("  Connect to swarm?", default=True):
+        _env_set("HIVEMIND_URL", "https://hivemind.aethera-s1.com")
+        console.print("  [green]Swarm: connected[/green]")
+    else:
+        _env_set("HIVEMIND_URL", "")
+        console.print("  [dim]Swarm disabled. Set HIVEMIND_URL in .env to enable.[/dim]")
+
+    # Step 4: Daily Target
+    console.print("\n[bold]4. Daily Target[/bold]")
+    tgt = click.prompt("  Target % per day", type=float, default=2.0)
+    _env_set("DAILY_TARGET_PCT", str(tgt))
+
+    # Step 5: Risk Settings
+    console.print("\n[bold]5. Risk Settings[/bold]")
+    dd = click.prompt("  Max drawdown %", type=float, default=20.0)
+    _env_set("MAX_DRAWDOWN_PCT", str(dd))
+    pos = click.prompt("  Max position % of equity", type=float, default=5.0)
+    _env_set("MAX_POSITION_PCT", str(pos))
+
+    # Generate Ed25519 identity
+    console.print("\n[bold]6. Agent Identity[/bold]")
+    try:
+        from src.identity import AgentIdentity
+        identity = AgentIdentity.generate()
+        console.print(f"  [green]Agent ID: {identity.agent_id[:16]}...[/green]")
+        console.print("  [dim]Identity saved to data/identity.ed25519[/dim]")
+    except Exception as e:
+        console.print(f"  [yellow]Identity generation skipped: {e}[/yellow]")
+
+    # Summary
+    console.print("\n" + "=" * 50)
+    console.print("[bold green]Setup complete![/bold green]")
+    console.print(f"  Balance:    ${bal:.2f}" if bal else "  Balance:    unverified")
+    console.print(f"  Model:      {mdl}")
+    console.print(f"  Swarm:      {'connected' if _env_load().get('HIVEMIND_URL') else 'disabled'}")
+    console.print(f"  Daily tgt:  {tgt}%")
+    console.print(f"  Max DD:     {dd}%")
+    console.print("=" * 50)
+    console.print("\n[bold]Next steps:[/bold]")
+    console.print("  1. [bold]aethera start[/bold]    — Launch API + TUI")
+    console.print("  2. [bold]aethera doctor[/bold]   — Full diagnostic")
+    console.print("  3. [bold]aethera daemon start[/bold] — Run 24/7")
+    console.print("")
+
+
+
 # ---- model ----
 
 @cli.command()
@@ -2069,3 +2247,6 @@ def debate(lines):
 
 if __name__ == "__main__":
     cli()
+
+
+
