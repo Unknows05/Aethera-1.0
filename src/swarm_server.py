@@ -3,6 +3,7 @@ HiveMind Swarm Server — central intelligence hub for VPS deployment.
 Collects lessons, performance metrics, and crowd-optimized thresholds.
 """
 import json
+import re
 import sqlite3
 import logging
 import os
@@ -22,6 +23,21 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 DB_PATH = "data/swarm.db"
+
+# PnL sanitization patterns: strip USD amounts, percentages, entry/exit prices
+_PNL_SANITIZE = re.compile(
+    r'\$[\d,]+(?:\.\d+)?'
+    r'|[+-]?\d+\.?\d*\s*%'
+    r'|(?:entry|exit|price|stop|target)\s*(?:at|=|:)\s*[\d,.]+',
+    re.IGNORECASE,
+)
+
+
+def _anonymize_text(text: str) -> str:
+    """Remove PnL amounts, prices, and percentages from text before storing."""
+    if not text:
+        return text
+    return _PNL_SANITIZE.sub("[redacted]", text)
 
 app = FastAPI(
     title="Aethera HiveMind",
@@ -66,6 +82,8 @@ def _init_db():
             signal TEXT DEFAULT '',
             outcome TEXT DEFAULT '',
             confidence REAL DEFAULT 0.0,
+            held_hours REAL DEFAULT 0.0,
+            exit_reason TEXT DEFAULT '',
             score INTEGER DEFAULT 1,
             timestamp TEXT NOT NULL,
             FOREIGN KEY(agent_id) REFERENCES agents(agent_id)
@@ -82,6 +100,7 @@ def _init_db():
             pnl_pct REAL DEFAULT 0.0,
             held_hours REAL DEFAULT 0.0,
             exit_reason TEXT DEFAULT '',
+            confidence REAL DEFAULT 0.0,
             timestamp TEXT NOT NULL,
             FOREIGN KEY(agent_id) REFERENCES agents(agent_id)
         )
@@ -90,6 +109,56 @@ def _init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_lessons_rule ON lessons(rule)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_lessons_score ON lessons(score DESC)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_performance_agent ON performance(agent_id)")
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS debates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent_id TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            regime TEXT DEFAULT '',
+            signal TEXT DEFAULT '',
+            bull_score REAL DEFAULT 50.0,
+            bear_score REAL DEFAULT 50.0,
+            final_decision TEXT DEFAULT 'WAIT',
+            overrode INTEGER DEFAULT 0,
+            reasoning TEXT DEFAULT '',
+            timestamp TEXT NOT NULL,
+            FOREIGN KEY(agent_id) REFERENCES agents(agent_id)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_debates_agent ON debates(agent_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_debates_decision ON debates(final_decision)")
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS skills (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            procedure TEXT DEFAULT '',
+            pitfalls TEXT DEFAULT '',
+            evidence TEXT DEFAULT '',
+            regime TEXT DEFAULT '',
+            signal TEXT DEFAULT '',
+            trade_count INTEGER DEFAULT 0,
+            win_rate REAL DEFAULT 0.0,
+            timestamp TEXT NOT NULL,
+            FOREIGN KEY(agent_id) REFERENCES agents(agent_id)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_skills_regime_signal ON skills(regime, signal)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_skills_win_rate ON skills(win_rate DESC)")
+
+    # Migration: add new columns to existing tables if they exist
+    c.execute("PRAGMA table_info(lessons)")
+    lesson_cols = {row[1] for row in c.fetchall()}
+    if "held_hours" not in lesson_cols:
+        c.execute("ALTER TABLE lessons ADD COLUMN held_hours REAL DEFAULT 0.0")
+    if "exit_reason" not in lesson_cols:
+        c.execute("ALTER TABLE lessons ADD COLUMN exit_reason TEXT DEFAULT ''")
+
+    c.execute("PRAGMA table_info(performance)")
+    perf_cols = {row[1] for row in c.fetchall()}
+    if "confidence" not in perf_cols:
+        c.execute("ALTER TABLE performance ADD COLUMN confidence REAL DEFAULT 0.0")
     conn.commit()
     conn.close()
 
@@ -196,21 +265,23 @@ async def lessons_push(request: Request):
         signal = lesson.get("signal", "")
         outcome = lesson.get("result", lesson.get("outcome", ""))
         confidence = float(lesson.get("confidence", 0))
+        held_hours = float(lesson.get("held_hours", 0))
+        exit_reason = lesson.get("exit_reason", "")[:200]
         timestamp = data.get("timestamp", datetime.now(timezone.utc).isoformat())
 
         conn = _db()
         c = conn.cursor()
         c.execute(
-            """INSERT INTO lessons (agent_id, rule, tags, regime, signal, outcome, confidence, score, timestamp)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)""",
-            (agent_id, rule, tags, regime, signal, outcome, confidence, timestamp),
+            """INSERT INTO lessons (agent_id, rule, tags, regime, signal, outcome, confidence, held_hours, exit_reason, score, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
+            (agent_id, rule, tags, regime, signal, outcome, confidence, held_hours, exit_reason, timestamp),
         )
         conn.commit()
         conn.close()
 
         score = update_crowd_scores(rule)
 
-        logger.info(f"[HiveMind] Lesson from {agent_id}: {regime}/{signal} score={score}")
+        logger.info(f"[HiveMind] Lesson from {agent_id}: {regime}/{signal} score={score} held={held_hours}h")
         return {"ok": True, "crowd_score": score}
     except HTTPException:
         raise
@@ -287,12 +358,13 @@ async def performance_push(request: Request):
         pnl_pct = float(event.get("pnl_pct", 0))
         held_hours = float(event.get("held_hours", 0))
         exit_reason = event.get("exit_reason", "")[:200]
+        confidence = float(event.get("confidence", 0))
         timestamp = data.get("timestamp", datetime.now(timezone.utc).isoformat())
 
         c.execute(
-            """INSERT INTO performance (agent_id, symbol, regime, signal, result, pnl_pct, held_hours, exit_reason, timestamp)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (agent_id, symbol, regime, signal, result, pnl_pct, held_hours, exit_reason, timestamp),
+            """INSERT INTO performance (agent_id, symbol, regime, signal, result, pnl_pct, held_hours, exit_reason, confidence, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (agent_id, symbol, regime, signal, result, pnl_pct, held_hours, exit_reason, confidence, timestamp),
         )
         conn.commit()
         conn.close()
@@ -304,6 +376,149 @@ async def performance_push(request: Request):
     except Exception as e:
         logger.error(f"[HiveMind] Performance push error: {e}")
         return {"ok": False, "error": str(e)}
+
+
+@app.post("/api/hivemind/debate/push")
+async def debate_push(request: Request):
+    """Push anonymized debate outcome — reasoning is stripped to PnL-free text."""
+    try:
+        data = await request.json()
+        agent_id = data.get("agent_id", "").strip()
+        debate = data.get("debate", {})
+
+        if not agent_id or not debate:
+            raise HTTPException(status_code=400, detail="agent_id and debate required")
+
+        signature = data.pop("_signature", "")
+        verify_payload = {k: v for k, v in data.items() if k != "_signature"}
+
+        conn = _db()
+        c = conn.cursor()
+        c.execute("SELECT pubkey_hex FROM agents WHERE agent_id = ?", (agent_id,))
+        agent_row = c.fetchone()
+
+        if agent_row and agent_row["pubkey_hex"]:
+            pubkey = agent_row["pubkey_hex"]
+            if signature and not AgentIdentity.verify(pubkey, verify_payload, signature):
+                raise HTTPException(status_code=403, detail="Invalid signature")
+
+        symbol = debate.get("symbol", "")
+        regime = debate.get("regime", "")
+        signal = debate.get("signal", "")
+        bull_score = float(debate.get("bull_score", 50))
+        bear_score = float(debate.get("bear_score", 50))
+        final_decision = debate.get("final_decision", "WAIT")
+        overrode = bool(debate.get("overrode", False))
+        reasoning = _anonymize_text(debate.get("reasoning", "")[:300])
+        timestamp = data.get("timestamp", datetime.now(timezone.utc).isoformat())
+
+        c.execute(
+            """INSERT INTO debates (agent_id, symbol, regime, signal, bull_score, bear_score,
+               final_decision, overrode, reasoning, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (agent_id, symbol, regime, signal, bull_score, bear_score,
+             final_decision, overrode, reasoning, timestamp),
+        )
+        conn.commit()
+        conn.close()
+
+        logger.info(f"[HiveMind] Debate from {agent_id}: {symbol} {final_decision} (B:{bull_score} vs Be:{bear_score})")
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[HiveMind] Debate push error: {e}")
+        return {"ok": False, "error": str(e)}
+
+
+@app.post("/api/hivemind/skills/push")
+async def skills_push(request: Request):
+    """Push a proven skill (evidence-based, not all skills)."""
+    try:
+        data = await request.json()
+        agent_id = data.get("agent_id", "").strip()
+        skill = data.get("skill", {})
+
+        if not agent_id or not skill:
+            raise HTTPException(status_code=400, detail="agent_id and skill required")
+
+        signature = data.pop("_signature", "")
+        verify_payload = {k: v for k, v in data.items() if k != "_signature"}
+
+        conn = _db()
+        c = conn.cursor()
+        c.execute("SELECT pubkey_hex FROM agents WHERE agent_id = ?", (agent_id,))
+        agent_row = c.fetchone()
+
+        if agent_row and agent_row["pubkey_hex"]:
+            pubkey = agent_row["pubkey_hex"]
+            if signature and not AgentIdentity.verify(pubkey, verify_payload, signature):
+                raise HTTPException(status_code=403, detail="Invalid signature")
+
+        name = skill.get("name", "")[:100]
+        description = _anonymize_text(skill.get("description", "")[:300])
+        procedure = _anonymize_text(skill.get("procedure", "")[:500])
+        pitfalls = _anonymize_text(skill.get("pitfalls", "")[:300])
+        evidence = _anonymize_text(skill.get("evidence", "")[:300])
+        regime = skill.get("regime", "")
+        signal = skill.get("signal", "")
+        trade_count = int(skill.get("trade_count", 0))
+        win_rate = float(skill.get("win_rate", 0))
+        timestamp = data.get("timestamp", datetime.now(timezone.utc).isoformat())
+
+        c.execute(
+            """INSERT INTO skills (agent_id, name, description, procedure, pitfalls, evidence,
+               regime, signal, trade_count, win_rate, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (agent_id, name, description, procedure, pitfalls, evidence,
+             regime, signal, trade_count, win_rate, timestamp),
+        )
+        conn.commit()
+        conn.close()
+
+        logger.info(f"[HiveMind] Skill from {agent_id}: {name} (n={trade_count}, wr={win_rate}%)")
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[HiveMind] Skill push error: {e}")
+        return {"ok": False, "error": str(e)}
+
+
+@app.get("/api/hivemind/skills/pull")
+async def skills_pull(
+    regime: str = Query(None),
+    signal: str = Query(None),
+    min_trades: int = Query(3, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """Pull proven skills (presets) from swarm."""
+    try:
+        conn = _db()
+        c = conn.cursor()
+        query = "SELECT * FROM skills WHERE trade_count >= ?"
+        params: list = [min_trades]
+        if regime:
+            query += " AND regime = ?"
+            params.append(regime)
+        if signal:
+            query += " AND signal = ?"
+            params.append(signal)
+        query += " ORDER BY win_rate DESC, trade_count DESC LIMIT ?"
+        params.append(limit)
+        c.execute(query, params)
+        rows = c.fetchall()
+        conn.close()
+
+        skills = []
+        for r in rows:
+            d = dict(r)
+            skills.append(d)
+
+        return {"ok": True, "skills": skills, "count": len(skills)}
+    except Exception as e:
+        logger.error(f"[HiveMind] Skills pull error: {e}")
+        return {"ok": False, "error": str(e), "skills": []}
 
 
 @app.get("/api/hivemind/thresholds")

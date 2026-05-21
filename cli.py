@@ -31,6 +31,9 @@ SCRIPT_DIR = Path(__file__).parent
 # HELPERS
 # ═══════════════════════════════════════════════════════════════
 
+# Track if .env existed before this session — for cleanup on failure
+_env_created_this_session = False
+
 def _env_load():
     e = {}
     p = Path(".env")
@@ -51,7 +54,10 @@ def _env_apply():
 
 
 def _env_set(key, value):
+    global _env_created_this_session
     p = Path(".env")
+    if not p.exists():
+        _env_created_this_session = True
     old_vars = _env_load()
     # Strip newlines and whitespace to prevent injection of extra env var lines
     old_vars[key] = value.strip().replace("\n", "").replace("\r", "")
@@ -73,6 +79,47 @@ def _env_unset(key):
             lines.append(f"{k}={v}")
     p.write_text("\n".join(lines) + "\n")
     p.chmod(0o600)
+
+
+def _env_cleanup_on_failure():
+    """Remove .env if it was created during this session and setup failed.
+    Prevents leaking partial/invalid credentials on disk."""
+    global _env_created_this_session
+    p = Path(".env")
+    if _env_created_this_session and p.exists():
+        p.unlink()
+        _env_created_this_session = False
+        console.print("[dim]Cleaned up .env after failed setup[/dim]")
+
+
+def _env_snapshot():
+    """Save a snapshot of current .env for rollback on failure.
+    Returns the snapshot dict or None if .env didn't exist."""
+    p = Path(".env")
+    if p.exists():
+        return _env_load()
+    return None
+
+
+def _env_restore(snapshot):
+    """Restore .env from a snapshot. If snapshot is None, delete .env."""
+    global _env_created_this_session
+    p = Path(".env")
+    if snapshot is None:
+        if p.exists():
+            p.unlink()
+            _env_created_this_session = False
+        return
+    lines = []
+    for k, v in snapshot.items():
+        if v:
+            lines.append(f"{k}={v}")
+    if lines:
+        p.write_text("\n".join(lines) + "\n")
+        p.chmod(0o600)
+    elif p.exists():
+        p.unlink()
+        _env_created_this_session = False
 
 
 def _public_ip():
@@ -176,9 +223,9 @@ def _require_env():
 
 
 @click.group()
-@click.version_option(version="1.5.8")
+@click.version_option(version="1.6.0")
 def cli():
-    """Aethera V1.5 — Autonomous crypto trading agent."""
+    """Aethera V1.6 — Autonomous crypto trading agent."""
 
 
 # ---- model ----
@@ -244,6 +291,9 @@ def model(search):
         _env_set("LLM_PROVIDER", "openrouter")
     console.print(f"\n[green]Model: {selected[0]}[/green]")
 
+    # Snapshot for rollback if test fails
+    snapshot = _env_snapshot()
+
     # Test connection
     console.print("[dim]Testing...[/dim]")
     try:
@@ -259,6 +309,9 @@ def model(search):
             console.print("[green]Connection OK[/green]")
     except Exception as e:
         console.print(f"[yellow]Could not verify: {e}[/yellow]")
+        # Rollback: restore previous .env state
+        _env_restore(snapshot)
+        console.print("[dim]Reverted .env changes[/dim]")
 
 
 # ---- config show ----
@@ -704,7 +757,7 @@ def status():
     ip = _public_ip()
     bal = _balance()
 
-    console.print(Panel.fit("[bold cyan]Aethera v1.5[/bold cyan]"))
+    console.print(Panel.fit("[bold cyan]Aethera v1.6[/bold cyan]"))
     console.print(f"  IP:        [green]{ip or 'Unknown'}[/green]")
     if bal is not None:
         tgt = float(env.get("DAILY_TARGET_PCT", 15))
@@ -1208,7 +1261,7 @@ def status():
 @swarm.command()
 @click.argument("url")
 def connect(url):
-    """Set swarm server URL."""
+    """Set swarm server URL with rollback on failure."""
     if url.startswith("http://"):
         console.print("[bold red]Insecure HTTP — your swarm data will be sent in plaintext.[/bold red]")
         console.print("[yellow]Use an HTTPS URL to encrypt data in transit.[/yellow]")
@@ -1217,6 +1270,9 @@ def connect(url):
     elif not url.startswith("https://"):
         console.print("[red]Invalid URL. Must start with https://[/red]")
         return
+
+    # Snapshot before writing for rollback
+    snapshot = _env_snapshot()
 
     _env_set("HIVEMIND_URL", url)
     console.print(f"[green]Swarm server set to: {url}[/green]")
@@ -1230,8 +1286,14 @@ def connect(url):
             console.print(f"[green]Registered with swarm.[/green]")
         else:
             console.print(f"[yellow]Registration failed (server may be offline).[/yellow]")
+            # Rollback: restore previous .env state
+            _env_restore(snapshot)
+            console.print("[dim]Reverted .env changes[/dim]")
     except Exception as e:
         console.print(f"[yellow]Registration error: {e}[/yellow]")
+        # Rollback: restore previous .env state
+        _env_restore(snapshot)
+        console.print("[dim]Reverted .env changes[/dim]")
 
 
 @swarm.command()
@@ -1431,7 +1493,7 @@ def update():
 @cli.command()
 def version():
     """Show version info."""
-    console.print(f"[bold cyan]Aethera v1.5.0[/bold cyan]")
+    console.print(f"[bold cyan]Aethera v1.6.0[/bold cyan]")
     console.print(f"  Python: [dim]{sys.version.split()[0]}[/dim]")
     console.print(f"  Path:   [dim]{SCRIPT_DIR}[/dim]")
 

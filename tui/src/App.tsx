@@ -31,7 +31,7 @@ export default function App({ baseUrl }: Props) {
   })
   const [signals, setSignals] = useState<Signal[]>([])
   const [terminalLines, setTerminalLines] = useState<string[]>([
-    '  Aethera v1.5 TUI — Type /help for commands',
+    '  Aethera v1.6 TUI — Type /help for commands',
     '',
   ])
   const [showInput, setShowInput] = useState(true)

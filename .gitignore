@@ -1,29 +1,74 @@
+# Runtime data (never commit)
+data/
+vault/index.db
+vault/lessons/
+vault/skills/
+vault/memory/
+vault/strategies/
+*.pid
+
 # Python
 __pycache__/
-*.pyc
-*.pyo
-venv/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
 *.egg-info/
+.installed.cfg
+*.egg
+.ruff_cache/
+.pytest_cache/
 
-# Runtime data (contains secrets)
-data/
-
-# Environment
-.env
-.env.*
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
 
 # IDE
 .vscode/
 .idea/
-.ruff_cache/
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# TUI
+# Node (TUI)
 tui/node_modules/
 tui/dist/
 
-# Vault data
-/vault/
+# Web dashboard static (generated)
+static/generated/
+
+# Logs
+*.log
+logs/
+
+# Secrets (never commit)
+.env
+.env.local
+.env.production
+*.key
+*.pem
+
+# HiveMind cache
+data/hivemind_cache.json
+
+# Backups
+data/backups/
+

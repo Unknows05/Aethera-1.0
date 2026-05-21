@@ -121,6 +121,32 @@ class ScreeningEngineV2:
         self._debate_enabled = config.get("debate", {}).get("enabled", True)
         self._debate_min_confidence = config.get("debate", {}).get("min_confidence", 50)
 
+        # ReAct Agent (LLM Orchestrator — Meridian-style)
+        self.react_agent = None
+        self.react_executor = None
+        react_enabled = config.get("react_agent", {}).get("enabled", True)
+        if react_enabled and llm_api_key:
+            try:
+                from openai import OpenAI
+                from src.agents.tools.executor import ToolExecutor
+                from src.agents.react_loop import ReactAgent
+                react_model = config.get("react_agent", {}).get("model", llm_model)
+                react_client = OpenAI(base_url=llm_base_url, api_key=llm_api_key, timeout=60)
+                self.react_executor = ToolExecutor(
+                    engine=self,
+                    vault_search=self.vault_search,
+                    hivemind=None,  # Set after hivemind client is available
+                )
+                self.react_agent = ReactAgent(
+                    client=react_client,
+                    executor=self.react_executor,
+                    model=react_model,
+                    max_steps=config.get("react_agent", {}).get("max_steps", 15),
+                )
+                logger.info(f"[EngineV2] ReAct agent enabled (model={react_model})")
+            except Exception as e:
+                logger.warning(f"[EngineV2] ReAct agent init failed: {e}")
+
         # Initial vault index
         try:
             self.vault_indexer.index_all()
@@ -957,6 +983,167 @@ class ScreeningEngineV2:
             self.vault_indexer.index_all()
         except Exception as e:
             logger.debug(f"[EngineV2] Vault re-index: {e}")
+
+    def set_hivemind_client(self, hivemind):
+        """Set HiveMind client on the ReAct executor for swarm tool access."""
+        if self.react_executor:
+            self.react_executor.hivemind = hivemind
+
+    async def run_react_screening(self, portfolio: Dict = None) -> Dict:
+        """Run a screening cycle via ReAct agent (LLM orchestrator)."""
+        if not self.react_agent:
+            return {"ok": False, "error": "ReAct agent not initialized"}
+
+        # Get lessons for context
+        lessons_text = None
+        try:
+            from src.agents.lesson_deriver import derive_lesson
+            from src.vault.lesson_manager import LessonManager
+            lm = LessonManager(self.db.conn)
+            recent = lm.get_recent(limit=10)
+            if recent:
+                lessons_text = "\n".join([
+                    f"- [{l.get('outcome', '?')}] {l.get('rule', '')[:200]}"
+                    for l in recent
+                ])
+        except Exception:
+            pass
+
+        # Get swarm lessons
+        swarm_text = None
+        try:
+            from src.hivemind_client import get_hivemind
+            hive = get_hivemind()
+            if hive and hive.is_enabled():
+                swarm_lessons = hive.pull_lessons(limit=6)
+                if swarm_lessons:
+                    swarm_text = "\n".join([
+                        f"- [HIVEMIND] {l.get('rule', '')[:200]}"
+                        for l in swarm_lessons
+                    ])
+        except Exception:
+            pass
+
+        from src.agents.react_loop import run_screening
+        result = await run_screening(
+            agent=self.react_agent,
+            portfolio=portfolio,
+            lessons=lessons_text,
+            swarm_lessons=swarm_text,
+        )
+
+        # Log decision
+        if result.get("tool_calls"):
+            for tc in result["tool_calls"]:
+                if tc["tool"] == "open_position" and tc.get("success"):
+                    from src.agents.decision_log import append_decision
+                    append_decision(
+                        decision_type="open",
+                        actor="REACT_SCREENER",
+                        symbol=tc["args"].get("symbol", ""),
+                        summary=tc["args"].get("reason", "")[:200],
+                        signal=tc["args"].get("signal", ""),
+                        confidence=tc["args"].get("confidence", 50),
+                    )
+
+        return {"ok": True, "react": result}
+
+    async def run_react_management(self, portfolio: Dict = None) -> Dict:
+        """Run a management cycle via ReAct agent (LLM orchestrator)."""
+        if not self.react_agent:
+            return {"ok": False, "error": "ReAct agent not initialized"}
+
+        # Get open positions
+        positions = []
+        try:
+            c = self.db.conn.cursor()
+            c.execute("SELECT * FROM signals WHERE status='open' ORDER BY timestamp DESC")
+            positions = [dict(r) for r in c.fetchall()]
+        except Exception:
+            pass
+
+        if not positions:
+            return {"ok": True, "react": {"content": "No open positions to manage", "steps": 0}}
+
+        from src.agents.react_loop import run_management
+        result = await run_management(
+            agent=self.react_agent,
+            portfolio=portfolio,
+            positions=positions,
+        )
+
+        return {"ok": True, "react": result}
+
+    async def process_outcome_with_react(self, outcomes: List[Dict]):
+        """Process trade outcomes: derive lessons, update skills, evolve thresholds."""
+        if not outcomes:
+            return
+
+        # Auto-derive lessons from outcomes
+        from src.agents.lesson_deriver import derive_lesson
+        from src.vault.lesson_manager import LessonManager
+        from src.agents.symbol_memory import record_trade
+        from src.agents.skill_engine import update_skill_performance
+
+        lm = LessonManager(self.db.conn)
+        for o in outcomes:
+            # Derive lesson
+            lesson = derive_lesson(o)
+            if lesson:
+                lm.add_lesson(
+                    lesson["rule"],
+                    lesson.get("tags", []),
+                    outcome=lesson.get("outcome", "manual"),
+                )
+                logger.info(f"[EngineV2] Auto-lesson: {lesson['rule'][:100]}")
+
+            # Update symbol memory
+            record_trade(
+                symbol=o.get("symbol", ""),
+                signal=o.get("signal", ""),
+                regime=o.get("regime", ""),
+                result=o.get("result", ""),
+                pnl_pct=o.get("pnl_pct", 0),
+                confidence=o.get("confidence", 50),
+                held_hours=o.get("held_hours", 0),
+                exit_reason=o.get("exit_reason", ""),
+                reason=o.get("reason", ""),
+            )
+
+        # Evolve thresholds
+        try:
+            c = self.db.conn.cursor()
+            c.execute(
+                "SELECT symbol, signal, regime, result, pnl, confidence FROM signals "
+                "WHERE status='closed' AND pnl IS NOT NULL ORDER BY timestamp DESC LIMIT 100"
+            )
+            trades = []
+            for r in c.fetchall():
+                trades.append({
+                    "symbol": r[0], "signal": r[1], "regime": r[2],
+                    "result": r[3], "pnl_pct": r[4] or 0, "confidence": r[5] or 50,
+                })
+            if len(trades) >= 10:
+                from src.agents.threshold_evolution import evolve_thresholds
+                evolution = evolve_thresholds(trades)
+                if evolution:
+                    logger.info(f"[EngineV2] Thresholds evolved: {evolution['rationale']}")
+        except Exception as e:
+            logger.debug(f"[EngineV2] Threshold evolution error: {e}")
+
+        # Update skill performance
+        try:
+            from src.agents.skill_engine import get_active_skill
+            active = get_active_skill()
+            if active:
+                for o in outcomes:
+                    update_skill_performance(
+                        active["name"],
+                        o.get("result", ""),
+                        o.get("pnl_pct", 0),
+                    )
+        except Exception as e:
+            logger.debug(f"[EngineV2] Skill update error: {e}")
 
     def close(self):
         pass

@@ -156,6 +156,19 @@ async def lifespan(app: FastAPI):
     # Auto-retrain ML when enough new labeled data accumulates
     scheduler.add_job(auto_check_retrain, "interval", hours=1, id="retrain_check",
                       replace_existing=True)
+    # Push proven skills to HiveMind every 6 hours
+    scheduler.add_job(auto_push_skills, "interval", hours=6, id="skill_push",
+                      replace_existing=True)
+    # Run crowd analysis to auto-create skills from swarm lessons daily
+    scheduler.add_job(auto_crowd_analysis, "cron", hour=6, minute=0, id="crowd_analysis",
+                      replace_existing=True)
+    # ReAct agent screening cycle (LLM orchestrator)
+    react_interval = config.get("react_agent", {}).get("scan_interval_minutes", 15)
+    scheduler.add_job(auto_react_screening, "interval", minutes=react_interval,
+                      id="react_screening", replace_existing=True)
+    # ReAct agent management cycle
+    scheduler.add_job(auto_react_management, "interval", minutes=30,
+                      id="react_management", replace_existing=True)
 
     scheduler.start()
 
@@ -179,6 +192,23 @@ async def lifespan(app: FastAPI):
         logger.info(f"[API] LLM: {'ready' if lb.is_ready() else 'no key'}")
     except Exception as e:
         logger.debug(f"[API] LLM init: {e}")
+
+    # Set HiveMind client on ReAct executor
+    try:
+        hive = get_hivemind()
+        if hive and engine:
+            engine.set_hivemind_client(hive)
+            logger.info("[API] ReAct executor HiveMind client set")
+    except Exception as e:
+        logger.debug(f"[API] HiveMind executor setup: {e}")
+
+    # Initialize default executable skills
+    try:
+        from src.agents.skill_engine import init_default_skills
+        init_default_skills()
+        logger.info("[API] Default skills initialized")
+    except Exception as e:
+        logger.debug(f"[API] Skill init: {e}")
 
     yield
 
@@ -253,6 +283,27 @@ async def auto_scan():
             next_run = datetime.now() + timedelta(minutes=interval)
             engine.set_next_scan(next_run.isoformat())
             logger.info(f"[Scheduler] Scan done: {result['summary']} | Next: {next_run:%H:%M:%S}")
+
+            # Push debate outcomes to HiveMind
+            try:
+                signals = result.get("data", [])
+                hive = get_hivemind()
+                if hive.is_enabled() and signals:
+                    for s in signals:
+                        debate = s.get("debate")
+                        if debate:
+                            hive.push_debate_outcome(
+                                symbol=s.get("symbol", ""),
+                                regime=s.get("regime", ""),
+                                signal=s.get("signal", ""),
+                                bull_score=debate.get("bull_final", 50),
+                                bear_score=debate.get("bear_final", 50),
+                                final_decision=debate.get("signal", "WAIT"),
+                                overrode=s.get("debate_overrode", False),
+                                reasoning=f"Bull:{debate.get('bull_final',50)} vs Bear:{debate.get('bear_final',50)} → {debate.get('signal','WAIT')}",
+                            )
+            except Exception as e:
+                logger.debug(f"[Scheduler] Debate push failed: {e}")
         else:
             logger.error(f"[Scheduler] Scan failed: {result.get('error')}")
     except Exception as e:
@@ -374,8 +425,35 @@ async def auto_check_outcomes():
                         record_trade(sr["symbol"], sr["regime"], sr["signal"], sr["result"], sr["pnl_pct"] or 0, sr["confidence"] or 50, held)
                         try:
                             hive = get_hivemind()
-                            hive.push_event(sr["symbol"], sr["regime"], sr["signal"], sr["result"], sr["pnl_pct"] or 0, held, sr.get("exit_reason", ""))
+                            hive.push_event(
+                                sr["symbol"], sr["regime"], sr["signal"],
+                                sr["result"], sr["pnl_pct"] or 0, held,
+                                sr.get("exit_reason", ""), sr["confidence"] or 50,
+                            )
                         except Exception: pass
+
+                # ReAct agent: process outcomes → derive lessons, update skills, evolve thresholds
+                try:
+                    outcomes = []
+                    c3 = engine.db.conn.cursor()
+                    c3.execute(
+                        "SELECT symbol, signal, regime, result, pnl_pct, confidence, "
+                        "exit_reason, reason FROM signals WHERE status='closed' "
+                        "AND exit_timestamp >= datetime('now', '-5 minutes')"
+                    )
+                    for r in c3.fetchall():
+                        outcomes.append({
+                            "symbol": r[0], "signal": r[1], "regime": r[2],
+                            "result": r[3], "pnl_pct": r[4] or 0,
+                            "confidence": r[5] or 50, "exit_reason": r[6] or "",
+                            "reason": r[7] or "",
+                            "held_hours": 0,
+                        })
+                    if outcomes:
+                        await engine.process_outcome_with_react(outcomes)
+                        logger.info(f"[Scheduler] ReAct outcome processing: {len(outcomes)} trades")
+                except Exception as e:
+                    logger.debug(f"[Scheduler] ReAct outcome processing error: {e}")
 
                 # Sync balance after closing positions
                 if _account_creds.get('connected'):
@@ -431,6 +509,154 @@ async def auto_daily_wr():
             await telegram.send_wr_update(wr_data)
     except Exception as e:
         logger.error(f"[Scheduler] Daily WR error: {e}")
+
+
+async def auto_push_skills():
+    """Analyze performance data and push proven skills to HiveMind."""
+    try:
+        logger.info("[Scheduler] Auto-push skills...")
+        hive = get_hivemind()
+        if not hive.is_enabled():
+            return
+
+        # Query DB for signal performance by regime
+        conn = engine.db.conn
+        c = conn.cursor()
+        c.execute("""
+            SELECT regime, signal,
+                   COUNT(*) as trade_count,
+                   ROUND(100.0 * SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) / COUNT(*), 1) as win_rate,
+                   GROUP_CONCAT(DISTINCT symbol) as symbols
+            FROM signals
+            WHERE status = 'closed' AND regime IS NOT NULL AND regime != ''
+            GROUP BY regime, signal
+            HAVING trade_count >= 5
+            ORDER BY win_rate DESC, trade_count DESC
+        """)
+        rows = c.fetchall()
+
+        pushed = 0
+        for row in rows:
+            regime = row[0] or "UNKNOWN"
+            signal = row[1] or "UNKNOWN"
+            trade_count = row[2]
+            win_rate = row[3]
+            symbols = row[4] or ""
+
+            # Only push skills with decent win rate
+            if win_rate < 55:
+                continue
+
+            # Build skill from vault/lessons
+            try:
+                c2 = conn.cursor()
+                c2.execute("""
+                    SELECT content FROM lessons
+                    WHERE regime = ? AND signal = ?
+                    ORDER BY timestamp DESC LIMIT 3
+                """, (regime, signal))
+                lesson_rows = c2.fetchall()
+                evidence = "\n".join([r[0] for r in lesson_rows])[:300] if lesson_rows else f"{trade_count} trades, {win_rate}% WR"
+
+                skill_name = f"{regime} {signal} Setup"
+                hive.push_skill(
+                    name=skill_name,
+                    description=f"Proven {signal} pattern in {regime} regime",
+                    procedure=f"Enter {signal} when {regime} regime detected. Symbols: {symbols[:100]}",
+                    pitfalls=f"Avoid during high funding, low volume, or conflicting debate signals",
+                    evidence=evidence,
+                    regime=regime,
+                    signal=signal,
+                    trade_count=trade_count,
+                    win_rate=win_rate,
+                )
+                pushed += 1
+                logger.info(f"[Scheduler] Pushed skill: {skill_name} (n={trade_count}, wr={win_rate}%)")
+            except Exception as e:
+                logger.debug(f"[Scheduler] Skill push failed for {regime}/{signal}: {e}")
+
+        if pushed:
+            logger.info(f"[Scheduler] Skills push complete: {pushed} skills pushed")
+        else:
+            logger.info("[Scheduler] No new proven skills to push")
+    except Exception as e:
+        logger.error(f"[Scheduler] Skill push error: {e}")
+
+
+async def auto_crowd_analysis():
+    """Run crowd analysis on swarm lessons to auto-create skills."""
+    try:
+        logger.info("[Scheduler] Crowd analysis...")
+        from src.crowd_analysis import run_crowd_analysis
+        skills = run_crowd_analysis(limit=100)
+        if skills:
+            logger.info(f"[Scheduler] Crowd analysis created {len(skills)} skills")
+            if telegram and telegram.is_ready():
+                await telegram.send_message(f"🧠 Crowd analysis: {len(skills)} new swarm skills created")
+        else:
+            logger.info("[Scheduler] Crowd analysis: no new skills")
+    except Exception as e:
+        logger.error(f"[Scheduler] Crowd analysis error: {e}")
+
+
+async def auto_react_screening():
+    """Run ReAct agent screening cycle (LLM orchestrator)."""
+    try:
+        if not engine or not engine.react_agent:
+            return
+        logger.info("[Scheduler] ReAct screening...")
+        portfolio = {
+            "balance": _balance_cache.get("balance", "N/A"),
+            "open_positions": 0,
+            "win_rate": "N/A",
+        }
+        try:
+            c = engine.db.conn.cursor()
+            c.execute("SELECT COUNT(*) FROM signals WHERE status='open'")
+            portfolio["open_positions"] = c.fetchone()[0]
+        except Exception:
+            pass
+        result = await engine.run_react_screening(portfolio=portfolio)
+        if result.get("ok"):
+            react = result.get("react", {})
+            logger.info(f"[Scheduler] ReAct screening done: {react.get('steps', 0)} steps, "
+                        f"{len(react.get('tool_calls', []))} tool calls")
+            if react.get("content"):
+                logger.info(f"[Scheduler] ReAct: {react['content'][:200]}")
+    except Exception as e:
+        logger.error(f"[Scheduler] ReAct screening error: {e}")
+
+
+async def auto_react_management():
+    """Run ReAct agent management cycle (LLM orchestrator)."""
+    try:
+        if not engine or not engine.react_agent:
+            return
+        # Check if there are open positions first
+        try:
+            c = engine.db.conn.cursor()
+            c.execute("SELECT COUNT(*) FROM signals WHERE status='open'")
+            open_count = c.fetchone()[0]
+            if open_count == 0:
+                return  # Nothing to manage
+        except Exception:
+            return
+
+        logger.info("[Scheduler] ReAct management...")
+        portfolio = {
+            "balance": _balance_cache.get("balance", "N/A"),
+            "open_positions": open_count,
+        }
+        result = await engine.run_react_management(portfolio=portfolio)
+        if result.get("ok"):
+            react = result.get("react", {})
+            logger.info(f"[Scheduler] ReAct management done: {react.get('steps', 0)} steps, "
+                        f"{len(react.get('tool_calls', []))} tool calls")
+            if react.get("content"):
+                logger.info(f"[Scheduler] ReAct: {react['content'][:200]}")
+    except Exception as e:
+        logger.error(f"[Scheduler] ReAct management error: {e}")
+
 
 
 async def _update_balance_cache_if_connected():
@@ -651,20 +877,11 @@ async def get_learning_state():
 async def get_swarm_status():
     """Standalone swarm connection status endpoint."""
     try:
-        env = {}
-        env_path = Path(".env")
-        if env_path.exists():
-            with open(env_path, "r") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and "=" in line and not line.startswith("#"):
-                        k, v = line.split("=", 1)
-                        env[k.strip()] = v.strip().strip("\"'")
+        hive = get_hivemind()
+        url = hive.server_url
+        agent_id = hive.agent_id
 
-        url = env.get("HIVEMIND_URL", "")
-        agent_id = env.get("AGENT_ID", "")
-
-        if not url:
+        if not hive.enabled:
             return {"ok": True, "swarm": {"connected": False, "reason": "not_configured", "agent_id": agent_id}}
 
         import requests
@@ -1517,3 +1734,5 @@ async def websocket_endpoint(ws: WebSocket):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=False, log_level="info")
+
+

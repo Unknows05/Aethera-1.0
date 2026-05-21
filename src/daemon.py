@@ -106,7 +106,7 @@ class AetheraDaemon:
 
     async def start(self):
         """Start the daemon — initialize all components and begin cycles."""
-        logger.info("[Daemon] Starting Aethera v1.5...")
+        logger.info("[Daemon] Starting Aethera v1.6...")
 
         # Load previous state
         self.load_state()

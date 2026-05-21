@@ -23,7 +23,7 @@ export function modeColor(mode: string): string {
 export default function Header({ status, wsConnected }: HeaderProps) {
   const mode = modeLabel(status.mode)
   const mColor = modeColor(status.mode)
-  const headerLeft = `⚡ Aethera v1.5  [${mode}]  Scan #${status.scan_count}`
+  const headerLeft = `⚡ Aethera v1.6  [${mode}]  Scan #${status.scan_count}`
   const headerRight = status.balance ? `$${status.balance.toFixed(2)}` : '---'
   const connStatus = wsConnected ? '●' : '○'
   const connColor = wsConnected ? 'green' : 'red'

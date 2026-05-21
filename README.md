@@ -1,288 +1,280 @@
-# Aethera v1.5
+# Aethera — Autonomous AI Trading Agent
 
-**Autonomous AI crypto trading agent. Self-hosted. Self-learning. Swarm-intelligent.**
-
-> Upgraded from Coin-Screener v1.3 → Aethera v1.5
-
----
-
-## What is Aethera?
-
-Aethera is an autonomous trading agent that connects to your Binance Futures account. An LLM acts as the strategist — it analyzes the market, picks pairs, and configures risk. A quant engine scans markets in parallel, generates signals, and executes trades. A Bull/Bear debate pipeline reasons adversarially before each decision. A knowledge vault stores lessons and skills from past trades. Agents can share anonymous patterns via swarm learning.
-
-- **Market:** Binance Futures USDT-M Perpetual (LONG + SHORT)
-- **AI:** OpenRouter (DeepSeek V4, free models available)
-- **Interface:** TypeScript TUI (Hermes-style terminal dashboard)
-- **Learning:** Real PnL outcomes → vault lessons → auto-skills → swarm sync
-- **Safety:** Hard risk gates, circuit breakers, encrypted keys
-
----
-
-## Install
-
-```bash
-# Linux / macOS
-curl -fsSL https://raw.githubusercontent.com/Unknows05/Aethera-1.0/main/install.sh | bash
-# Windows
-irm https://raw.githubusercontent.com/Unknows05/Aethera-1.0/main/install.ps1 | iex
-```
-
-### Update from Aethera v1.0
-
-If you have the previous version installed:
-
-```bash
-aethera update          # Auto-update to v1.5
-# OR manually:
-cd ~/aethera && git pull origin main
-cd tui && npm install && npm run build
-```
-
-Your `.env`, `data/`, and `vault/` are preserved during update.
-
----
+> Local-first crypto trading agent with swarm intelligence.
+> Runs on your machine. Your data stays yours.
 
 ## Quick Start
 
 ```bash
-aethera init       # One-time setup wizard
-aethera start      # Launch TUI + API server
+# 1. Clone
+git clone https://github.com/YOUR_USERNAME/Aethera.git
+cd Aethera
+
+# 2. Install
+./install.sh
+
+# 3. Setup
+aethera init
+
+# 4. Run
+aethera start
 ```
 
-Setup wizard guides you through:
-1. **Binance API** — key + secret (Futures enabled, IP whitelisted)
-2. **LLM Model** — pick from OpenRouter (free tier available)
-3. **Daily Target** — profit target %, max trades, risk per trade
-4. **Telegram** — optional notifications
-5. **Identity** — auto-generated agent ID
+## What Is Aethera?
 
-At the end, it asks: **"Start Aethera now? [Y/n]"** → press Y to launch.
+Aethera is an **autonomous trading agent** that:
+- **Scans** 500+ crypto pairs on Binance Futures
+- **Analyzes** markets with 50+ technical indicators + LLM reasoning
+- **Debates** trade decisions with Bull/Bear agents before executing
+- **Learns** from every trade outcome
+- **Shares** anonymized lessons with the HiveMind swarm network
+- **Improves** by pulling crowd-optimized strategies
 
----
-
-## Commands
-
-### Core
-
-| Command | Description |
-|---------|-------------|
-| `aethera init` | Full interactive setup wizard |
-| `aethera start` | Launch API server + TypeScript TUI |
-| `aethera stop` | Stop all Aethera processes |
-| `aethera restart` | Stop and restart |
-| `aethera status` | Check balance, tier, model |
-| `aethera ready` | System readiness check |
-| `aethera doctor` | Full diagnostic |
-
-### Trading
-
-| Command | Description |
-|---------|-------------|
-| `aethera positions` | Show open positions from Binance |
-| `aethera signals` | Latest signals from database |
-| `aethera stats --days 30` | Performance summary (WR, PF, Sharpe) |
-| `aethera backtest` | Run backtest on historical signals |
-| `aethera lessons` | Recent trading lessons |
-
-### Target & Risk
-
-| Command | Description |
-|---------|-------------|
-| `aethera target show` | Current target config |
-| `aethera target set 15` | Set daily target % |
-| `aethera target risk show` | Risk parameters |
-| `aethera target risk set trade 5` | Risk per trade % |
-| `aethera target compound on` | Enable compounding |
-
-### Daemon (Autonomous Mode)
-
-| Command | Description |
-|---------|-------------|
-| `aethera daemon start` | Start background daemon |
-| `aethera daemon stop` | Stop daemon |
-| `aethera daemon status` | Check daemon state |
-| `aethera daemon logs` | View daemon logs |
-| `aethera daemon restart` | Restart daemon |
-
-### Knowledge Vault
-
-| Command | Description |
-|---------|-------------|
-| `aethera memory show` | View agent memory |
-| `aethera log` | Search decision log |
-| `aethera log -s BTCUSDT` | Search by symbol |
-| `aethera vault search <query>` | FTS5 full-text search |
-| `aethera vault list` | List vault files by folder |
-| `aethera vault backup` | Backup vault to tar.gz |
-| `aethera vault restore <file>` | Restore from backup |
-
-### Swarm
-
-| Command | Description |
-|---------|-------------|
-| `aethera swarm status` | Swarm connection status |
-| `aethera swarm connect <url>` | Connect to swarm server |
-| `aethera swarm disconnect` | Disconnect from swarm |
-
-### Config
-
-| Command | Description |
-|---------|-------------|
-| `aethera config show` | Show current .env values |
-| `aethera model` | Browse and change LLM model |
-| `aethera model -s deepseek` | Filter models by name |
-| `aethera cleanup` | Clean old logs and sessions |
-| `aethera export` | Export trade data |
-| `aethera uninstall` | Remove Aethera completely |
-
----
-
-## TUI Commands
-
-Inside the TypeScript TUI, type `/` followed by a command:
-
-| Command | Description |
-|---------|-------------|
-| `/status` | System status + balance |
-| `/signals` | Latest signals list |
-| `/scan` | Trigger manual scan |
-| `/debate` | Debate pipeline stats |
-| `/strategy` | Current LLM strategy |
-| `/balance` | Check balance |
-| `/positions` | Open positions |
-| `/model` | LLM model info |
-| `/target` | Capital target |
-| `/trade` | Trade status |
-| `/swarm` | Swarm connection |
-| `/audit` | Audit chain verify |
-| `/vault` | Vault overview |
-| `/skills` | List skills |
-| `/memory` | View memory |
-| `/help` | List all commands |
-| `/stop` | Exit TUI |
-
-Press `q` to quit. Tab completion works for commands.
-
----
+All analysis, execution, and data storage happens **on your machine**. Only anonymized lessons (no PnL, no prices) are shared with the swarm.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    TypeScript TUI (Ink)                      │
-│  Signals panel  │  Status sidebar  │  Terminal  │  Footer   │
-└────────────────────────┬────────────────────────────────────┘
-                         │ HTTP polling (3s)
-┌────────────────────────▼────────────────────────────────────┐
-│                    FastAPI Server (:8000)                    │
-│  /api/status  /api/signals  /api/tui/status  /api/scan     │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────────┐
-│                  Screening Engine V2                         │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────┐  │
-│  │ Quick    │→ │ Deep     │→ │ Debate   │→ │ Risk Gate  │  │
-│  │ Scan     │  │ Scan     │  │ Pipeline │  │ (Hard+Soft)│  │
-│  └──────────┘  └──────────┘  └──────────┘  └────────────┘  │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────────┐
-│                    Knowledge Vault                           │
-│  Skills  │  Lessons  │  Memory  │  FTS5 Index  │  Backup   │
-└─────────────────────────────────────────────────────────────┘
+YOUR MACHINE (user-side)                    SWARM HUB (server-side)
+├── cli.py → aethera init/start/daemon      ├── hivemind.aethera-s1.com
+├── api.py → FastAPI :8000                  │   ├── swarm_server.py :8900
+├── src/engine_v2.py                        │   ├── lessons push/pull
+├── src/agents/                             │   ├── skills push/pull
+│   ├── screening_agent.py (5 min)          │   ├── performance tracking
+│   ├── management_agent.py (5 min)         │   └── crowd thresholds
+│   ├── bull/bear/debate (3 rounds)         │
+│   ├── risk_gate.py                        └── DB: swarm.db (SQLite)
+│   ├── scheduler.py
+│   └── reflection.py (60 min)
+├── src/vault/ (knowledge vault)
+├── src/hivemind_client.py → auto-connect
+├── tui/ (TypeScript terminal UI)
+└── vault/ (Markdown skills/lessons)
 ```
-
-### Debate Pipeline
-
-For signals with confidence ≥ 50:
-
-1. **Bull Agent** — argues LONG case (TA, OI, funding, regime, vault knowledge)
-2. **Bear Agent** — argues SHORT case (counter-evidence, risks, divergence)
-3. **3 rounds** of opening → rebuttal → final arguments
-4. **Synthesizer** — neutral LLM weighs both sides, outputs final signal
-5. **Risk Gate** — hard rules (no override) + soft rules (LLM can override with reason)
-
-### Risk Gates
-
-**Hard Rules (cannot override):**
-- Max drawdown ≥ 20% → circuit breaker
-- 3 consecutive losses → pause 4 hours
-- Blacklisted symbols blocked
-- Max daily trades reached
-
-**Soft Rules (LLM can override):**
-- Regime conflict (LONG in BEAR regime)
-- High funding rate
-- Low confidence signal
-- High correlation exposure
-
----
 
 ## Project Structure
 
 ```
-aethera/
-├── cli.py                  # CLI entry point (click)
-├── api.py                  # FastAPI server
-├── config.yaml             # Default configuration
-├── README.md               # This file
-├── tui/                    # TypeScript TUI (Ink + React)
+├── cli.py              # CLI commands (aethera init/start/status/daemon)
+├── api.py              # FastAPI server + background scheduler
+├── config.yaml         # Default configuration
+├── install.sh          # Setup script (Linux/macOS)
+├── install.ps1         # Setup script (Windows)
+├── requirements.txt    # Python dependencies
+├── requirements-ml.txt # ML dependencies (XGBoost, etc.)
+│
+├── src/                # Core engine
+│   ├── engine_v2.py    # Main screening engine
+│   ├── hivemind_client.py  # Swarm client (auto-connect)
+│   ├── identity.py     # Ed25519 keypair for swarm auth
+│   ├── agents/         # Multi-agent system
+│   │   ├── screening_agent.py  # Market scanner
+│   │   ├── management_agent.py # Position manager
+│   │   ├── bull_agent.py       # Bull case arguments
+│   │   ├── bear_agent.py       # Bear case arguments
+│   │   ├── debate.py           # 3-round debate orchestrator
+│   │   ├── risk_gate.py        # Hard risk rules
+│   │   ├── scheduler.py        # Job scheduler
+│   │   ├── reflection.py       # Self-reflection (60 min)
+│   │   └── health.py           # System health monitor
+│   ├── vault/          # Knowledge vault (FTS5 search)
+│   │   ├── indexer.py      # FTS5 SQLite index
+│   │   ├── skill_manager.py    # Skills CRUD
+│   │   ├── lesson_manager.py   # Lessons CRUD
+│   │   ├── memory.py       # Persistent agent memory
+│   │   ├── search.py       # Full-text search
+│   │   └── backup.py       # Vault backup
+│   ├── binance_api.py  # Binance Futures API wrapper
+│   ├── risk_manager.py # Risk calculations
+│   ├── scorer.py       # Technical scoring
+│   ├── market_regime.py    # Regime detection
+│   ├── ml_engine.py    # ML predictions
+│   ├── backtest_engine.py  # Backtesting
+│   ├── telegram_bot.py # Telegram notifications
+│   └── ...
+│
+├── tui/                # TypeScript terminal UI (React + Ink)
 │   ├── src/
-│   │   ├── cli.tsx         # CLI entry
-│   │   ├── App.tsx         # Main TUI component
-│   │   ├── api.ts          # API client
-│   │   └── types.ts        # TypeScript interfaces
-│   └── dist/               # Built output
-├── src/
-│   ├── engine_v2.py        # Screening engine
-│   ├── daemon.py           # Background daemon
-│   ├── agents/
-│   │   ├── screening_agent.py  # LLM screening (ReAct loop)
-│   │   ├── management_agent.py # Position management
-│   │   ├── reflection.py       # Hourly learning + evolve
-│   │   ├── bull_agent.py       # Bull debate agent
-│   │   ├── bear_agent.py       # Bear debate agent
-│   │   ├── synthesizer.py      # Debate synthesizer
-│   │   ├── debate.py           # Debate orchestrator
-│   │   ├── risk_gate.py        # Risk gate
-│   │   ├── scheduler.py        # Cycle scheduler
-│   │   ├── health.py           # Health monitor
-│   │   └── data_collector.py
-│   ├── vault/
-│   │   ├── indexer.py      # FTS5 indexer
-│   │   ├── skill_manager.py
-│   │   ├── lesson_manager.py
-│   │   ├── memory.py
-│   │   ├── search.py
-│   │   └── backup.py
-│   └── ...                 # Other modules
-└── data/                   # Runtime data (DB, logs, state)
+│   └── dist/cli.js     # Built output
+│
+├── vault/              # Knowledge base (Markdown files)
+│   ├── skills/         # Trading strategies
+│   ├── lessons/        # Trade lessons
+│   ├── strategies/     # Strategy configs
+│   └── memory/         # Agent memory
+│
+├── static/             # Web dashboard (HTML + HTMX + Alpine.js)
+├── scripts/            # Utility scripts
+└── tests/              # Test suite
 ```
 
----
+## Commands
 
-## FAQ
+### Setup
 
-**Is it free?** Yes. You pay only Binance trading fees + LLM API (free tier on OpenRouter).
+```bash
+# Install dependencies
+./install.sh            # Linux/macOS
+./install.ps1           # Windows
 
-**Is it safe?** API keys are encrypted locally. Code runs on your machine. Swarm shares only anonymous patterns (no PnL amounts).
+# Interactive setup wizard
+aethera init
+# → Sets up .env, generates Ed25519 identity, tests connection
+```
 
-**Minimum capital?** $10 works. $25+ recommended.
+### Run
 
-**Can I lose money?** YES. Crypto trading is high-risk. This is a tool, not a guarantee. Never trade more than you can afford to lose.
+```bash
+# Start API server + TUI
+aethera start
 
-**What if LLM API fails?** Falls back to quant-only mode. No LLM = no debate, but quant engine still runs.
+# Stop all processes
+aethera stop
 
-**Does it work 24/7?** Yes. Use `aethera daemon start` for autonomous mode. Survives TUI close and reboot.
+# Restart
+aethera restart
 
----
+# Run as background daemon (24/7)
+aethera daemon start
+aethera daemon status
+aethera daemon logs
 
-## License
+# Web dashboard only
+aethera dashboard --port 8000
+```
 
-MIT
+### Diagnostics
 
----
+```bash
+# Full system diagnostic
+aethera doctor
 
-## Disclaimer
+# Readiness check
+aethera ready
 
-This software is for educational purposes only. Cryptocurrency trading carries significant risk. Past performance does not guarantee future results. The authors are not responsible for any financial losses. Use at your own risk.
+# Show status (balance, tier, model)
+aethera status
+```
+
+### Trading
+
+```bash
+# View open positions
+aethera positions
+
+# View latest signals
+aethera signals
+
+# Performance summary
+aethera stats --days 30
+
+# Run backtest
+aethera backtest --capital 25
+```
+
+### Knowledge Vault
+
+```bash
+# View agent memory
+aethera memory show
+
+# View decision log
+aethera log
+
+# Search by symbol
+aethera log -s BTCUSDT
+
+# View recent lessons
+aethera lessons
+```
+
+### Swarm (HiveMind)
+
+```bash
+# Check swarm connection
+aethera swarm status
+
+# Set custom swarm server
+aethera swarm connect https://hivemind.aethera-s1.com
+
+# Push lessons to swarm
+aethera swarm push
+
+# Pull lessons from swarm
+aethera swarm pull --regime BULL
+```
+
+### Configuration
+
+```bash
+# Show .env values (secrets hidden)
+aethera config show
+
+# Browse and change LLM model
+aethera model
+aethera model -s deepseek    # Filter models
+```
+
+## Configuration
+
+### .env
+
+Created by `aethera init`. Override defaults from `config.yaml`.
+
+```bash
+# Exchange API
+BINANCE_API_KEY=your_key
+BINANCE_API_SECRET=your_secret
+
+# LLM (OpenRouter)
+OPENROUTER_API_KEY=your_key
+DEFAULT_MODEL=deepseek/deepseek-chat-v4
+
+# HiveMind Swarm
+HIVEMIND_URL=https://hivemind.aethera-s1.com
+HIVEMIND_AGENT_ID=auto-generated
+
+# Risk
+MAX_DRAWDOWN_PCT=20
+MAX_POSITION_PCT=5
+CONSECUTIVE_LOSS_PAUSE=4
+```
+
+### config.yaml
+
+Default values. `.env` overrides these.
+
+## Security
+
+- **Ed25519 identity** — each agent has a unique keypair for swarm auth
+- **PnL anonymization** — all data pushed to swarm is stripped of amounts, prices, percentages
+- **SSRF guard** — hivemind_client blocks localhost/private IPs
+- **API keys encrypted** — Fernet AES-256, stored in `data/`
+- **Risk hard-gates** — code-enforced, no LLM override:
+  - Max drawdown ≥ 20% → circuit breaker
+  - 3 consecutive losses → pause 4 hours
+  - Max position: 5% equity
+  - Blacklisted symbols blocked
+
+## HiveMind Swarm
+
+Connect to `hivemind.aethera-s1.com` to:
+- **Push** anonymized lessons from your trades
+- **Pull** crowd-optimized thresholds and proven skills
+- **View** live swarm stats at https://hivemind.aethera-s1.com
+
+Your raw data **never leaves your machine**. Only distilled, anonymized knowledge is shared.
+
+## Requirements
+
+- Python 3.10+
+- Node.js 18+ (for TUI)
+- Binance Futures account with API keys
+- OpenRouter API key (for LLM)
+
+## Links
+
+- **Swarm Dashboard**: https://hivemind.aethera-s1.com
+- **Landing Page**: https://aethera-s1.com
+- **HiveMind API**: https://hivemind.aethera-s1.com/api/hivemind/health
+

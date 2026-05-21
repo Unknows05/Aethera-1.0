@@ -137,7 +137,7 @@ wr_tracking:
 
 llm:
   provider: openrouter
-  model: deepseek/deepseek-chat-v4:free
+  model: deepseek/deepseek-v4-flash:free
   base_url: https://openrouter.ai/api/v1
   api_key: ""
 
